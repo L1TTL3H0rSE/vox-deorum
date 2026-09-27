@@ -137,11 +137,6 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   public outputSchema?: z.ZodSchema<TOutput>;
 
   /**
-   * Whether we will remove used tools from the active list
-   */
-  public removeUsedTools: boolean = false;
-  
-  /**
    * Whether we want to force the LLM to call tools (only works when activeTools exist)
    */
   public toolChoice: string = "required";
@@ -475,29 +470,6 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
       messages?: ModelMessage[];
       outputSchema?: ZodObject;
     } = {};
-
-    // Check for removeUsedTools option
-    if (this.removeUsedTools) {
-      // Get all tools that have been successfully used so far
-      const usedToolNames = new Set<string>();
-      for (const step of allSteps) {
-        for (const toolResult of step.toolResults) {
-          const output = toolResult.output;
-          const isError = output != null && typeof output === 'object' && 'isError' in output && (output as Record<string, unknown>).isError === true;
-          if (!isError) {
-            usedToolNames.add(toolResult.toolName);
-          }
-        }
-      }
-
-      // Filter out used tools from active tools
-      const currentActiveTools = this.getActiveTools(parameters);
-      if (currentActiveTools && usedToolNames.size > 0) {
-        config.activeTools = currentActiveTools.filter(
-          toolName => !usedToolNames.has(toolName)
-        );
-      }
-    }
 
     // Handle messages
     const toolChoice = this.toolChoice;

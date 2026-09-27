@@ -292,7 +292,7 @@ Move `cacheBreakpoint`, `MAX_CACHE_BREAKPOINTS`, and `markBreakpointOnLast()` fr
 
 On a continued round, the engine may add one Anthropic breakpoint to the last carried message within the four-breakpoint budget. It annotates only a provider copy.
 
-Keep model-specific transformations in provider middleware. Generated protocol text depends on the effective tool list, tool choice, framing, and structured-output conventions. Regenerating identical text does not disturb a stable prefix, but changing that text does. Strategists enable `removeUsedTools`, so their protocol can change between steps. Envoy tool lists are generally stable within a round but can differ across rounds, including the Diplomat deal gate.
+Keep model-specific transformations in provider middleware. Generated protocol text depends on the effective tool list, tool choice, framing, and structured-output conventions. Regenerating identical text does not disturb a stable prefix, but changing that text does. Strategist tool lists stay fixed across steps. Envoy tool lists are generally stable within a round but can differ across rounds, including the Diplomat deal gate.
 
 Use one placement rule for prompt-mode tool rescue in every execution, including disabled Strategists and Oracle: insert the generated protocol as a user message at the round boundary. Remove the action-framing, system-first merging, and leading-system insertion branches from protocol placement. Framing and structured output still determine its content. This preserves the prefix before the boundary when the protocol changes; it does not promise cache reuse for the suffix or for providers whose native tool definitions also changed.
 
@@ -310,7 +310,7 @@ Required-tool guidance, host-capability guidance, tool-history conversion, actio
 
 Tests assert that the rescue protocol follows the leading prefix in stateless calls and the carried prefix in continued calls, appears once on the provider copy, and never mutates `step.messages` or committed history. Change the effective tool list between steps and verify that only the generated protocol changes, with preceding source content intact.
 
-Anthropic also keys caches on the tools list, so `removeUsedTools` and the diplomat deal gate remain cache breakers.
+Anthropic also keys caches on the tools list, so the diplomat deal gate remains a cache breaker.
 
 ## Model options
 

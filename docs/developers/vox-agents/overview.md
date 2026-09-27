@@ -32,7 +32,7 @@ The main hooks, in the order they matter:
 | `executeEvaluation()` | When implemented, evaluates prepared state and processes answers in place of the chat loop. |
 | `getActiveTools()` | Names the tools the model may call this step. |
 | `getExtraTools()` | Contributes agent-specific tools beyond the shared MCP set. |
-| `prepareStep()` | Runs before each step. Can prune messages, drop already-used tools, or switch models mid-run. |
+| `prepareStep()` | Runs before each step. Can prune messages or switch models mid-run. |
 | `stopCheck()` | Decides after each step whether the loop is done. |
 | `getOutput()` / `postprocessOutput()` | Turn the final exchange into a typed result, optionally validated against a Zod schema. |
 

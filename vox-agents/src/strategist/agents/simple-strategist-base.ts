@@ -17,7 +17,6 @@ import { StrategyDecisionType } from "../../types/config.js";
  * @class
  */
 export abstract class SimpleStrategistBase extends Strategist {
-  public removeUsedTools: boolean = true;
   public completionTools = ["set-strategy", "set-flavors", "keep-status-quo"];
   public maxSteps = 5;
 
@@ -38,7 +37,7 @@ export abstract class SimpleStrategistBase extends Strategist {
 - The in-game AI calculates the best tactical decisions based on the strategy you set.
 - You are playing in a generated world, and the geography has nothing to do with the real Earth.
 - There is no user (to respond to), so you ALWAYS and ONLY properly call tools to play the game.
-- You can interact with multiple tools at a time. Used tools will be removed from the available list.
+- You can call multiple tools at a time. Repeated calls override past calls and do not provide a benefit.
 - Focus on the **macro-level** gameplay strategy (instead of coordinates etc.), as you DON'T have direct control over tactical actions.
 - The world is complicated and dynamic. Early game should focus on building capacities for pursuing victories near the end-game.
 - Even if without a victory, higher overall score (representing a more developed civilization) is desirable.`;

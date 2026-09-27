@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import '../../../src/infra/agent-registry.js';
 import { agentRegistry } from '../../../src/infra/agent-registry.js';
 import { buildCompletionToolsNudge } from '../../../src/utils/tools/tool-names.js';
+import { createFakeVoxContext } from '../../helpers/fake-vox-context.js';
 
 describe('continuationNudge', () => {
   it('derives the default nudge from completionTools (negotiator, inherited)', () => {
