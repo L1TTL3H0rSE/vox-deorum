@@ -103,7 +103,12 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
-/** Publish one finalized DLL recording through the recording archive script. */
+/**
+ * Publish one finalized DLL recording through the recording archive script.
+ * On success the published package is the canonical copy, so the game's
+ * source capture folder is deleted. Absent or failed archives leave the
+ * source alone, and a source-removal failure only logs a warning.
+ */
 async function archiveRawCaptureRecording(
   gameId: string,
   sourceRoot: string,
@@ -125,10 +130,17 @@ async function archiveRawCaptureRecording(
       windowsHide: true,
       maxBuffer: 1024 * 1024,
     });
-    return { status: 'ok' };
   } catch (error) {
     return { status: 'failed', detail: String(error) };
   }
+
+  try {
+    await fs.rm(resolvedSourceRoot, { recursive: true, force: true });
+    logger.debug(`Removed capture source folder for raw package ${gameId}`);
+  } catch (error) {
+    logger.warn(`Failed to remove capture source folder for game ${gameId}: ${String(error)}`);
+  }
+  return { status: 'ok' };
 }
 
 /**
@@ -236,7 +248,8 @@ export async function archiveGameData(
       logger.warn('No replay file found to archive');
     }
 
-    // Publish the finalized DLL recording through the recording archive script.
+    // Publish the finalized DLL recording through the recording archive script,
+    // which also clears the game's capture folder once the package is published.
     try {
       const documentsPath = await getDocumentsPath();
       const sourceRoot = path.join(documentsPath, 'My Games', 'Sid Meier\'s Civilization 5', 'VoxDeorumRL', gameId);

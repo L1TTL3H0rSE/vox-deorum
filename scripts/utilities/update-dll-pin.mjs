@@ -71,7 +71,7 @@ function main() {
     help: { type: 'boolean', short: 'h' },
   } });
   if (values.help) {
-    process.stdout.write(`Usage: npm run update-dll-pin -- [--line X.Y] [--dry-run]
+    process.stdout.write(`Usage: npm run update:dll-pin -- [--line X.Y] [--dry-run]
 
 Selects the published DLL release matching civ5-dll HEAD and updates its pin.
 Defaults to DEFAULT_LINE in scripts/vp-lines.txt. Requires Git and GitHub CLI.
@@ -91,7 +91,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     main();
   } catch (error) {
-    process.stderr.write(`update-dll-pin: ${error.message}\n`);
+    process.stderr.write(`update:dll: ${error.message}\n`);
     process.exitCode = 1;
   }
 }

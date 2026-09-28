@@ -18,7 +18,7 @@
     "update:codex-proxy": "node scripts/utilities/update-codex-proxy.mjs",
     "vp-pr": "node scripts/utilities/vp-pr.mjs",
     "vp-diff": "node scripts/utilities/vp-diff.mjs",
-    "update-dll-pin": "node scripts/utilities/update-dll-pin.mjs",
+    "update:dll": "node scripts/utilities/update-dll-pin.mjs",
     "update:claude-agent-sdk": "npm update @anthropic-ai/claude-agent-sdk",
     "clean:all": "npm run clean -ws --if-present"
   },

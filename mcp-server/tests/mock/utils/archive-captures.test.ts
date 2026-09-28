@@ -3,14 +3,15 @@
  * (src/utils/knowledge/archive.ts). With VOX_RL_CAPTURE=1 the game DLL writes
  * an RL recording tree under the Civ V user folder and finalizes it (final
  * commit, handles released) when the victory event fires; the archive then
- * moves the whole tree into archive/<experiment>/captures/<game-id>/, falls
- * back to a copy when the rename is not possible, and logs the outcome
- * without ever failing the rest of the archive.
+ * publishes that finalized recording as a raw ZIP package through the
+ * recording archive script and deletes the game's source capture folder. A
+ * missing recording is skipped, a failed package keeps the source in place,
+ * and neither ever fails the rest of the archive.
  *
  * The outside seams archive.ts touches — the Documents path, the
- * knowledgeManager singleton, and (to force the rename/copy failure paths)
- * fs rename/cp — are replaced with in-test fakes; everything else runs
- * against real temp directories.
+ * knowledgeManager singleton, and (to force the package failure path) the
+ * recording archive command via node:child_process execFile — are replaced
+ * with in-test fakes; everything else runs against real temp directories.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -102,7 +103,7 @@ describe('archiveGameData capture wiring', () => {
     process.chdir(originalCwd);
   });
 
-  it('publishes the recording through the recording archive script', async () => {
+  it('publishes the recording through the archive script and deletes the source folder', async () => {
     const gameId = mockEnv.gameId;
     await writeRecording(gameId);
 
@@ -116,7 +117,8 @@ describe('archiveGameData capture wiring', () => {
       path.join(workDir, 'archive', 'exp-test'),
       captureRoot(gameId),
     ]));
-    await expect(fs.access(captureRoot(gameId))).resolves.toBeUndefined();
+    // The published package is canonical, so the source tree is gone.
+    await expect(fs.access(captureRoot(gameId))).rejects.toThrow();
     await expect(fs.access(path.join(workDir, 'archive', 'exp-test', 'captures'))).rejects.toThrow();
     await expect(fs.access(result!.savePath)).resolves.toBeUndefined();
   });
