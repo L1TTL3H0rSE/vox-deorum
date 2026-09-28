@@ -23,6 +23,7 @@ import { SessionStatus, PlayerAssignment } from "../types/api.js";
 import { SeatingStateManager } from "../utils/game/seating/state.js";
 import type { ObservedSeating, SeatingClaim } from "../utils/game/seating/types.js";
 import { getMetadata, setMetadata } from "../utils/game/metadata.js";
+import { unwrapMcpResponse } from "../utils/models/mcp-response.js";
 import { agentRegistry } from '../infra/agent-registry.js';
 import { ensureModelsResolved, selectEvaluatorReference, selectModelReference } from '../utils/models/resolution.js';
 import { triageEnabled } from '../infra/triage.js';
@@ -635,9 +636,7 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
       });
     }
     if (this.config.autoPlay && !isVisualMode(this.config.production)) {
-      await setTimeout(3000);
-      const isFreshGame = this.config.gameMode === 'start' && params.turn === 0;
-      await mcpClient.callTool("lua-executor", { Script: buildStrategicViewLua(isFreshGame) });
+      void this.tryEnterStrategicView(this.config.gameMode === 'start' && params.turn === 0);
     }
 
     // Start production controller (recording waits for render events)
@@ -859,9 +858,27 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
         )
       });
       if (this.config.autoPlay && !isVisualMode(this.config.production)) {
-        await setTimeout(3000);
-        await mcpClient.callTool("lua-executor", { Script: buildStrategicViewLua(false) });
+        void this.tryEnterStrategicView(false);
       }
+    }
+  }
+
+  /**
+   * Best-effort switch to strategic view for non-visual autoplay, where it only
+   * saves rendering work. Callers start it without awaiting: if the game fails
+   * or never answers, play simply continues in the normal view, and nothing
+   * downstream (production start, the human's turn-0 decision) waits on it.
+   */
+  private async tryEnterStrategicView(isFreshGame: boolean): Promise<void> {
+    try {
+      await setTimeout(3000);
+      const result = unwrapMcpResponse(
+        await mcpClient.callTool("lua-executor", { Script: buildStrategicViewLua(isFreshGame) }),
+        "lua-executor"
+      );
+      if (result.Success === false) throw new Error(JSON.stringify(result.Error ?? {}));
+    } catch (error) {
+      logger.warn('Could not enter strategic view; continuing in normal view', error);
     }
   }
 

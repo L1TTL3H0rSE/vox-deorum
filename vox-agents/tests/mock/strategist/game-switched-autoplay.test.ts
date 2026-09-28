@@ -119,8 +119,9 @@ describe('handleGameSwitched autoplay reconciliation', () => {
     const s = session(true);
     await gameSwitched(s, 214);
 
+    // The strategic-view switch runs detached, so wait for it to be sent.
+    await vi.waitFor(() => expect(luaScripts()).toHaveLength(2));
     const scripts = luaScripts();
-    expect(scripts).toHaveLength(2);
     expect(scripts[0]).toContain('if Game.GetAIAutoPlay() == 0 then');
     expect(scripts[0]).toContain(`Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`);
     expect(scripts[1]).toBe(buildStrategicViewLua(false));
@@ -130,11 +131,42 @@ describe('handleGameSwitched autoplay reconciliation', () => {
     const s = session(true);
     await gameSwitched(s, 0);
 
+    await vi.waitFor(() => expect(luaScripts()).toHaveLength(2));
     const scripts = luaScripts();
     expect(scripts[0]).toContain(`Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`);
     // The turn-0 branch activates unconditionally — no reconcile guard.
     expect(scripts[0]).not.toContain('if Game.GetAIAutoPlay()');
     expect(scripts[1]).toBe(buildStrategicViewLua(true));
+  });
+
+  it('should finish the game switch when the strategic-view call never answers', async () => {
+    const strategicView = buildStrategicViewLua(true);
+    mcp.onTool('lua-executor', (args) =>
+      args.Script === strategicView ? new Promise(() => {}) : structuredResult({ Success: true })
+    );
+    const s = session(true);
+    const obsCall = vi.spyOn(s as any, 'obsCall');
+
+    await gameSwitched(s, 0);
+
+    // Steps after the switch still ran, and the switch itself was attempted.
+    expect(obsCall).toHaveBeenCalledWith('startProduction', expect.any(Function));
+    await vi.waitFor(() => expect(luaScripts()).toContain(strategicView));
+  });
+
+  it('should warn and carry on when the strategic-view call fails', async () => {
+    const strategicView = buildStrategicViewLua(true);
+    mcp.onTool('lua-executor', (args) =>
+      args.Script === strategicView
+        ? structuredResult({ Success: false, Error: { Code: 'LUA_EXECUTION_ERROR', Message: 'boom' } })
+        : structuredResult({ Success: true })
+    );
+    const s = session(true);
+    const obsCall = vi.spyOn(s as any, 'obsCall');
+
+    await expect(gameSwitched(s, 0)).resolves.toBeUndefined();
+    expect(obsCall).toHaveBeenCalledWith('startProduction', expect.any(Function));
+    await vi.waitFor(() => expect(luaScripts()).toContain(strategicView));
   });
 
   it('ignores a repeated GameSwitched for the same game', async () => {
