@@ -21,6 +21,7 @@ import { EventEmitter } from 'node:events';
 
 const logger = createLogger('MCPClient');
 const connectTimeoutMs = 3_600_000;
+const toolTimeoutMs = 660_000;
 const readinessPollIntervalMs = 200;
 
 /**
@@ -132,13 +133,9 @@ export class MCPClient extends EventEmitter {
       if (this.connectionPool) this.connectionPool.close();
       this.connectionPool = new Pool(new URL(transportConfig.endpoint!).origin, {
         connections: 50,
-        // undici defaults bodyTimeout/headersTimeout to 300s (5 min). The MCP
-        // server can legitimately stall the SSE write while Civ V is busy
-        // (e.g. Game.SaveReplay during a victory cinematic), and the resulting
-        // `TypeError: terminated` kills any in-flight notification. Push to
-        // 10 min so a single hung Lua call doesn't tear down the stream.
-        bodyTimeout: 600_000,
-        headersTimeout: 600_000,
+        // Allow the DLL's ten-minute message timeout plus time for the MCP response.
+        bodyTimeout: toolTimeoutMs,
+        headersTimeout: toolTimeoutMs,
       });
       this.dispatcher = new RetryAgent(
         this.connectionPool,
@@ -436,9 +433,9 @@ export class MCPClient extends EventEmitter {
 
     for (let I = 0; I <= 3; I++) {
       try {
-        // Out potato servers can be *really* slow
+        // Leave time for the bridge to report a ten-minute DLL timeout.
         const result = await this.client.callTool({ name, arguments: args }, undefined, {
-          timeout: 600000,
+          timeout: toolTimeoutMs,
           resetTimeoutOnProgress: true
         });
         return result;

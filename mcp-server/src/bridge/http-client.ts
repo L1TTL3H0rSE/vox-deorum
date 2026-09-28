@@ -54,8 +54,9 @@ export class HttpClient {
    */
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
-    this.standardPool = new Pool(baseUrl, { connections: 50 });
-    this.fastPool = new Pool(baseUrl, { connections: 5 });
+    // Allow the DLL's ten-minute message timeout plus time to return the response.
+    this.standardPool = new Pool(baseUrl, { connections: 50, headersTimeout: 660_000, bodyTimeout: 660_000 });
+    this.fastPool = new Pool(baseUrl, { connections: 5, headersTimeout: 660_000, bodyTimeout: 660_000 });
   }
 
   /**

@@ -54,7 +54,7 @@ A handful of values are fixed in the source. They are listed here so they are no
 
 | Value | Setting | Where |
 | --- | --- | --- |
-| 300 seconds | Timeout for a Lua call to the DLL | `bridge-service/src/services/dll-connector.ts` |
+| 600 seconds | Timeout for a Lua call to the DLL | `bridge-service/src/services/dll-connector.ts` |
 | 300 ms first delay, growing by 1.5x per attempt, capped at 5 seconds | Reconnection backoff to the DLL, retried indefinitely | `bridge-service/src/services/dll-connector.ts` |
 | 2 seconds | How long a graceful shutdown waits for the DLL to acknowledge the disconnect before giving up | `bridge-service/src/services/dll-connector.ts` |
 | 5 seconds (default) | Timeout for an outbound external call | per-function, overridable at registration |

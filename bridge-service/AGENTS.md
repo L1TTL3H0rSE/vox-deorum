@@ -95,7 +95,7 @@ Always implement 5-second keep-alive pings for SSE connections to prevent timeou
 
 - Single named pipe connection to the DLL via node-ipc
 - Automatic reconnection with exponential backoff (200ms base, first delay 300ms, capped at 5s)
-- Request tracking with UUID-based message correlation and 300s timeout
+- Request tracking with UUID-based message correlation and 600s timeout
 - The pipe id comes from `gamepipe.id`; the DLL reads its own `VOX_DEORUM_PIPE_NAME` and the two only match because they share a default. Change both together.
 
 ## Module System

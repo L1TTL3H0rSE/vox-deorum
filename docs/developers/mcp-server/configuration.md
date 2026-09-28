@@ -80,11 +80,14 @@ Several values a reader might go looking for are fixed in the source. They are l
 | 25 calls | Backlog at which the server auto-pauses the game | `mcp-server/src/bridge/manager.ts` |
 | 1 second | Delay before retrying a dropped event stream | `mcp-server/src/bridge/manager.ts` |
 | 50 / 5 connections | Standard and fast HTTP connection pools to the bridge | `mcp-server/src/bridge/http-client.ts` |
+| 11 minutes | HTTP header and body timeouts to the bridge, allowing its 10-minute DLL timeout to return | `mcp-server/src/bridge/http-client.ts` |
 | 5 seconds | Retry interval while waiting for the game database | `mcp-server/src/database/manager.ts` |
 | 30 seconds | Knowledge auto-save interval | `mcp-server/src/knowledge/manager.ts`, described in [knowledge.md](knowledge.md) |
 | 10 MB, 5 or 10 files | Log file rotation size and retention | `mcp-server/src/utils/logger.ts` |
 
 ## Common configurations
+
+Vox Agents also allows 11 minutes for MCP tool calls and HTTP transport inactivity in `vox-agents/src/utils/models/mcp-client.ts`. This leaves a minute for responses around the DLL's 10-minute message timeout.
 
 For normal play the defaults are right: HTTP on port 4000, the bridge on port 5000, SSE rather than the event pipe, and info logging. For development, set `LOG_LEVEL=debug`. To run the server as a child process of an agent framework rather than as a network service, set `MCP_TRANSPORT=stdio`.
 

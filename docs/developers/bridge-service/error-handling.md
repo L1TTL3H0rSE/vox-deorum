@@ -19,7 +19,7 @@ The codes a caller actually has to reason about:
 | Code | What happened | Does the bridge recover? |
 | --- | --- | --- |
 | `DLL_DISCONNECTED` | The game pipe is down: the game is closed, restarting, or the mod is not loaded. Also returned when a pause or registration notification could not be delivered. | Yes, infinite reconnection with backoff. |
-| `CALL_TIMEOUT` | A call exceeded its timeout: 300 seconds for Lua, per-registration for outbound external calls. | The request is abandoned and cleaned up; the connection stays up. |
+| `CALL_TIMEOUT` | A call exceeded its timeout: 600 seconds for Lua, per-registration for outbound external calls. | The request is abandoned and cleaned up; the connection stays up. |
 | `LUA_EXECUTION_ERROR` | The Lua function or script ran but failed inside the game. | No, it is a caller or script problem. |
 | `INVALID_FUNCTION` | A call named a function that is not registered, in either direction. | No. |
 | `INVALID_SCRIPT`, `INVALID_ARGUMENTS` | Malformed request: missing script, invalid registration, or a player id outside 0 to 63. | No, fix the request. |
@@ -40,7 +40,7 @@ This is the failure the bridge is most careful about, because it is the most com
 
 ## Timeouts
 
-A Lua call that the game never answers is cleaned up after 300 seconds and returned as `CALL_TIMEOUT`. The pending entry is removed so it does not leak.
+A Lua call that the game never answers is cleaned up after 600 seconds and returned as `CALL_TIMEOUT`. The pending entry is removed so it does not leak.
 
 If a single Lua call is timing out, the usual cause is that the game is paused. A call issued for a paused player will not be serviced until the game resumes, and the pause may be one you asked for. The three pause mechanisms are compared in [overview.md](overview.md).
 

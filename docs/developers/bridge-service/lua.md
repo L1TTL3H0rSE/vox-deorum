@@ -17,7 +17,7 @@ The Lua manager (`bridge-service/src/services/lua-manager.ts`) is the entry poin
 - **Call several at once** (`POST /lua/batch`) takes an array of function calls and turns them into one batch so they travel through the pipe together. Results come back in request order. This is the efficient path when a caller needs many values at once, and the MCP server uses it heavily to assemble game state.
 - **Run a raw script** (`POST /lua/execute`) submits a Lua script string to be evaluated directly, sent as a `lua_execute` message. The manager checks only that a non-empty string was actually provided, rejecting anything else as `INVALID_SCRIPT`.
 
-In every case the manager hands the message to the DLL connector and awaits the matching response. The connector assigns each message an id, holds it in its pending-request map, enforces the 300-second timeout, and settles it when the DLL answers. That queuing and timeout machinery is described in [connection.md](connection.md). The Lua manager itself is thin: it shapes the message, logs, and returns the connector's response unchanged.
+In every case the manager hands the message to the DLL connector and awaits the matching response. The connector assigns each message an id, holds it in its pending-request map, enforces the 600-second timeout, and settles it when the DLL answers. That queuing and timeout machinery is described in [connection.md](connection.md). The Lua manager itself is thin: it shapes the message, logs, and returns the connector's response unchanged.
 
 Because `POST /lua/execute` will run whatever it is given, anyone who can reach the port has full control of the game. The bridge does not authenticate callers; see the security note in [overview.md](overview.md).
 
