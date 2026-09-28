@@ -33,7 +33,11 @@ Even so, **the GitHub release body is not the changelog**: it is one commit mess
 
 ### The pre-built DLL
 
-Players never compile the gamecore, so a release ships a binary DLL. `scripts/vp-lines.txt` lists the supported lines and their default. Each committed `scripts/dll-release-info-<line>.txt` pin identifies the release tag and source commit for one line. `scripts/install/download-dll.cmd` derives the `CIVITAS-John/vox-populi` repository and `vox-deorum-<line>` branch, then retrieves the selected release. There is no scheduled pin updater or branch-head reconciliation: update a line by committing its new pin, and manually move the default submodule gitlink when its default changes. Building the DLL from source is a developer task; see [setup.md](setup.md) and [civ5-dll/building.md](civ5-dll/building.md).
+Players never compile the gamecore, so a release ships a binary DLL. `scripts/vp-lines.txt` lists the supported lines and their default. Each committed `scripts/dll-release-info-<line>.txt` pin identifies the release tag and source commit for one line. `scripts/install/download-dll.cmd` retrieves that pinned release from `CIVITAS-John/vox-populi`. Updating `civ5-dll` alone does not update the installed binary, including through `manual-update.cmd`.
+
+After pushing a DLL commit to `vox-deorum-<line>` and waiting for its published build, run `npm run update-dll-pin` from the repository root. It uses the current `civ5-dll` HEAD and the default VP line. Use `-- --line X.Y` for another supported line or `-- --dry-run` to preview. The command requires Git and GitHub CLI, verifies the build's recorded full commit, branch, and required assets, and leaves the pin unchanged if no matching build is ready. It does not build or download the DLL.
+
+Review and commit the updated pin together with the default line's submodule gitlink. For another line, restore the default checkout before committing. Run `scripts/install.cmd` to install the new pin locally; other checkouts receive it through `manual-update.cmd` after the outer commit is pushed. Building the DLL from source is a developer task; see [setup.md](setup.md) and [civ5-dll/building.md](civ5-dll/building.md).
 
 ## Versioning
 
