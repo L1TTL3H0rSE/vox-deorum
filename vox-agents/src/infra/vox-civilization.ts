@@ -534,10 +534,15 @@ export class VoxCivilization {
 
   /**
    * Cleanup resources.
-   * Stops monitoring and clears all callbacks.
+   * Stops monitoring, forgets the tracked process, and clears all callbacks.
+   * The tracked PID must be dropped too: with the poll stopped nothing could
+   * notice the game exiting later, and a stale PID would make the next
+   * startGame() believe a dead game is still running.
    */
   destroy(): void {
     this.stopProcessMonitoring();
+    this.monitoring = false;
+    this.externalProcessPid = null;
     this.exitCallbacks.clear();
   }
 }

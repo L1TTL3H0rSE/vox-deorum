@@ -220,6 +220,37 @@ describe('VoxCivilization (mock tier)', () => {
       expect(civ.isGameRunning()).toBe(false);
       expect(civ.getProcessId()).toBe(null);
     });
+
+    it('forgets the tracked process on destroy()', async () => {
+      mFindProcess.mockResolvedValue(31338);
+      const civ = new VoxCivilization();
+      await civ.startGame('LoadMods.lua');
+
+      civ.destroy();
+
+      expect(civ.isGameRunning()).toBe(false);
+      expect(civ.getProcessId()).toBe(null);
+    });
+
+    it('launches a new game after destroy() when the old process is gone', async () => {
+      mFindProcess.mockResolvedValueOnce(31339);
+      const civ = new VoxCivilization();
+      await civ.startGame('LoadMods.lua');
+      civ.destroy();
+
+      // The player closed Civ V by hand, so tasklist finds nothing until the relaunch.
+      const child = new FakeChild();
+      mSpawn.mockReturnValue(child as never);
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValue(4040);
+
+      const started = await civ.startGame('LoadMods.lua');
+
+      expect(started).toBe(true);
+      expect(mSpawn).toHaveBeenCalledTimes(1);
+      expect(civ.getProcessId()).toBe(4040);
+
+      civ.destroy();
+    });
   });
 
   describe('exit-callback registration and firing', () => {
