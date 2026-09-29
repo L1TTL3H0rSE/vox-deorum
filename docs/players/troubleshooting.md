@@ -6,6 +6,7 @@ Common problems and how to fix them, in the order you'll meet them. If your issu
 | --- | --- |
 | Installer can't find Civilization V | Install Civ V through Steam first, then confirm the game folder when the installer asks; see below. |
 | Dashboard doesn't open | Wait a few seconds, then open `http://localhost:5555` by hand; keep the console window open. |
+| Startup reports `ERR_PACKAGE_PATH_NOT_EXPORTED` | Close Vox Deorum and reinstall to replace incompatible dependencies; see below. |
 | Setup rejects a key or cannot load models | Use the wizard's message to correct the key or connection; see below. |
 | Codex login doesn't start or finish | Use the sign-in page and code shown in the dashboard; see below. |
 | Mod doesn't seem active | Start games from the dashboard's Play page; see below. |
@@ -21,6 +22,12 @@ Install Civ V through Steam first, then run the installer again. It asks you to 
 ## The dashboard doesn't open
 
 Give it a few seconds. If it never appears, open `http://localhost:5555` in your browser by hand. Keep the console window open while you play, and use its prompt to stop at the end. Still nothing? Close leftover Vox Deorum console windows and launch again. See [Getting Started: First launch](getting-started.md#first-launch) for the normal startup sequence.
+
+## Startup reports a package export error
+
+`ERR_PACKAGE_PATH_NOT_EXPORTED` can mean an older dependency was left behind during an upgrade. Close Vox Deorum and run the installer again. The installer replaces the bundled `node_modules` folder before copying dependencies.
+
+If you are using an older installer that still leaves this error, rename only the `node_modules` folder directly inside your Vox Deorum installation to `node_modules.old`, then reinstall. Keep your configuration and game data folders.
 
 ## Setup rejects my key or cannot load models
 

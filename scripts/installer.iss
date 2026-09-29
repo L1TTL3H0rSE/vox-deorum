@@ -97,6 +97,8 @@ Name: "{app}\scripts"
 Name: "{app}\node"
 
 [InstallDelete]
+; Replace dependencies so obsolete nested packages cannot override bundled versions.
+Type: filesandordirs; Name: "{app}\node_modules"
 ; Delete civ5-dll directory on reinstall to ensure clean installation
 Type: filesandordirs; Name: "{app}\civ5-dll"
 
