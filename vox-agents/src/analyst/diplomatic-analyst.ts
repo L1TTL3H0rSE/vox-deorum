@@ -18,6 +18,24 @@ import { getGameState, StrategistParameters } from "../strategist/strategy-param
 /** How many past turns of diplomatic history the analyst reads for each involved player. */
 const historyTurns = 30;
 
+/**
+ * Drop events already listed for an earlier player, so an event shared by the source and a subject
+ * appears once. Turns left without events are removed; `seen` carries the keys across players.
+ */
+function dropSeenEvents(events: Record<string, unknown[]>, seen: Set<string>): Record<string, unknown[]> {
+  const kept: Record<string, unknown[]> = {};
+  for (const [turn, list] of Object.entries(events)) {
+    const fresh = list.filter(event => {
+      const key = `${turn}:${JSON.stringify(event)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (fresh.length > 0) kept[turn] = fresh;
+  }
+  return kept;
+}
+
 /** One independent yes/no question per report category. */
 const categoryQuestions = {
   Diplomacy: {
@@ -147,9 +165,9 @@ export class DiplomaticAnalyst extends Analyst {
     const seen = new Set<string>();
     const history = playerIDs.map((playerID, index) => {
       const events = results[index];
-      return isFailedToolResult(events) || typeof events !== "object"
+      return isFailedToolResult(events) || !events || typeof events !== "object"
         ? { PlayerID: playerID, status: "unavailable" }
-        : { PlayerID: playerID, status: "available", events: events, seen };
+        : { PlayerID: playerID, status: "available", events: dropSeenEvents(events as Record<string, unknown[]>, seen) };
     });
     const reportMessage = {
       role: "user" as const,

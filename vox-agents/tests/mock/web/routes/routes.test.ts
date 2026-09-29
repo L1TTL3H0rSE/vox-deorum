@@ -72,6 +72,7 @@ import { runStrategistLoop } from '../../../../src/strategist/loop.js';
 import { sessionRegistry } from '../../../../src/infra/session-registry.js';
 import { installMockMcpClient, structuredResult } from '../../../helpers/mock-mcp-client.js';
 import { defaultConfig } from '../../../../src/utils/config/defaults.js';
+import { providerCredentials } from '../../../../src/types/constants.js';
 
 function makeApp() {
   const app = express();
@@ -98,10 +99,9 @@ beforeEach(() => {
   routeMocks.logger.debug.mockReset();
   routeMocks.proxy.state = 'stopped';
   routeMocks.proxy.loginPrompt = undefined;
-  for (const key of [
-    'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY',
-    'OPENROUTER_API_KEY', 'CHUTES_API_KEY', 'SYNTHETIC_API_KEY', 'OPENAI_COMPATIBLE_URL',
-  ]) vi.stubEnv(key, '');
+  for (const { required, optional = [] } of Object.values(providerCredentials)) {
+    for (const key of [...required, ...optional]) vi.stubEnv(key, '');
+  }
 });
 
 afterEach(() => {

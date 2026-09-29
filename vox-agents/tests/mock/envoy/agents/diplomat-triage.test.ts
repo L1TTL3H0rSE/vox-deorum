@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EnvoyThread, TriageSetting } from '../../../../src/types/index.js';
 import { agentRegistry } from '../../../../src/infra/agent-registry.js';
+import { config } from '../../../../src/utils/config.js';
 
 const diplomat = agentRegistry.get('diplomat')!;
 
@@ -63,12 +64,19 @@ describe('Diplomat.triage', () => {
   });
 
   it('should skip evaluation when no evaluator is configured', async () => {
+    // Hide any evaluator from the machine's config.json so the case does not depend on local setup.
+    const savedLlms = config.llms;
+    config.llms = Object.fromEntries(Object.entries(savedLlms).filter(([key]) => !key.endsWith('evaluator')));
     const ctx = triageContext({
       diplomat: enabledAssignment.diplomat,
     });
 
-    await expect(diplomat.triage?.({}, thread('context'), ctx, prepared)).resolves.toBeUndefined();
-    expect(ctx.evaluate).not.toHaveBeenCalled();
+    try {
+      await expect(diplomat.triage?.({}, thread('context'), ctx, prepared)).resolves.toBeUndefined();
+      expect(ctx.evaluate).not.toHaveBeenCalled();
+    } finally {
+      config.llms = savedLlms;
+    }
   });
 
   it('should choose the small tier for greeting mode without evaluating', async () => {
