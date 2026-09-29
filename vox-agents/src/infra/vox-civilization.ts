@@ -8,9 +8,9 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { setTimeout } from 'node:timers/promises'
-import { readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { createLogger } from '../utils/logger.js';
 import type { RandomSeedsConfig } from '../types/config.js';
 import {
@@ -299,6 +299,9 @@ export class VoxCivilization {
    * Civ reads `SyncRandSeed` and `MapRandSeed` during pregame initialization.
    * If the config omits one or both sides, write `0` for those sides so stale
    * fixed seeds in config.ini do not leak into an unseeded run.
+   *
+   * A player who never started Civ V has no config.ini. An unseeded run then
+   * leaves it alone; a seeded run creates it with just the seed settings.
    */
   async applyRandomSeeds(seeds?: RandomSeedsConfig): Promise<void> {
     const configPath = await getCiv5UserFilePath('config.ini');
@@ -306,7 +309,12 @@ export class VoxCivilization {
     try {
       content = await readFile(configPath, 'utf-8');
     } catch {
-      throw new Error(`config.ini not found at ${configPath}`);
+      if (seeds?.sync === undefined && seeds?.map === undefined) {
+        logger.warn(`config.ini not found at ${configPath}, skipping seed config`);
+        return;
+      }
+      content = '';
+      await mkdir(dirname(configPath), { recursive: true });
     }
 
     const original = readCivConfigSeedsContent(content);

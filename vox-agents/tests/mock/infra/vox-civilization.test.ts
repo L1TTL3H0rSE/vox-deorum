@@ -33,6 +33,7 @@ vi.mock('../../../src/utils/game/windows-process.js', () => ({
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
+  mkdir: vi.fn(),
 }));
 
 // Collapse the post-kill / post-launch sleeps so tests don't block on wall time.
@@ -67,7 +68,7 @@ import {
   isProcessRunning,
   killProcess,
 } from '../../../src/utils/game/windows-process.js';
-import { readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { spawn } from 'child_process';
 
 const mReadConfigSeeds = vi.mocked(readCivConfigSeedsContent);
@@ -78,6 +79,7 @@ const mIsRunning = vi.mocked(isProcessRunning);
 const mKillProcess = vi.mocked(killProcess);
 const mReadFile = vi.mocked(readFile);
 const mWriteFile = vi.mocked(writeFile);
+const mMkdir = vi.mocked(mkdir);
 const mSpawn = vi.mocked(spawn);
 
 const CONFIG_PATH = '/docs/My Games/Civ5/config.ini';
@@ -88,6 +90,7 @@ beforeEach(() => {
   mGetUserFilePath.mockResolvedValue(CONFIG_PATH);
   mReadFile.mockResolvedValue('[CONFIG]\n');
   mWriteFile.mockResolvedValue(undefined as never);
+  mMkdir.mockResolvedValue(undefined);
   mReadConfigSeeds.mockReturnValue({ sync: '111', map: '222' });
   mUpdateConfigSeeds.mockImplementation(() => 'UPDATED');
   mFindProcess.mockResolvedValue(null);
@@ -159,6 +162,38 @@ describe('VoxCivilization (mock tier)', () => {
 
       // Restores the FIRST captured original, not the second read.
       expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: 'orig', map: 'origmap' });
+    });
+  });
+
+  describe('missing config.ini (Civ V never started)', () => {
+    it('skips an unseeded run without throwing or writing', async () => {
+      mReadFile.mockRejectedValue(new Error('ENOENT'));
+      const civ = new VoxCivilization();
+
+      await expect(civ.applyRandomSeeds()).resolves.toBeUndefined();
+      await civ.restoreRandomSeeds();
+
+      expect(mWriteFile).not.toHaveBeenCalled();
+      expect(mMkdir).not.toHaveBeenCalled();
+    });
+
+    it('creates config.ini for a seeded run and restores zeros afterwards', async () => {
+      mReadFile.mockRejectedValue(new Error('ENOENT'));
+      mReadConfigSeeds.mockReturnValue({});
+      const civ = new VoxCivilization();
+
+      await civ.applyRandomSeeds({ sync: 5, map: 9 });
+
+      expect(mMkdir).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('', { sync: 5, map: 9 });
+      expect(mWriteFile).toHaveBeenCalledWith(CONFIG_PATH, 'UPDATED', 'utf-8');
+
+      // Restore reads the file back, which exists by now.
+      mReadFile.mockResolvedValue('[CONFIG]\n');
+      mUpdateConfigSeeds.mockClear();
+      await civ.restoreRandomSeeds();
+
+      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: '0', map: '0' });
     });
   });
 
