@@ -129,7 +129,7 @@ describe.skipIf(!liveGameEnabled)('VoxCivilization Integration Test', () => {
 
   it('should manage Civilization V lifecycle: start, monitor for 2 minutes, then kill', async () => {
     // Test parameters
-    const MONITOR_DURATION_MS = 5 * 60 * 1000; // 2 minutes
+    const MONITOR_DURATION_MS = 2 * 60 * 1000; // 2 minutes
     const CHECK_INTERVAL_MS = 10000; // Check every 10 seconds
 
     console.log('\n--- Phase 1: Verify no game is running ---');

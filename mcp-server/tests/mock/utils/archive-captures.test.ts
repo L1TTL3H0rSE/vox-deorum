@@ -131,18 +131,6 @@ describe('archiveGameData capture wiring', () => {
     await expect(fs.access(result!.savePath)).resolves.toBeUndefined();
   });
 
-  it('keeps archiving the save when capture collection fails', async () => {
-    const gameId = mockEnv.gameId;
-    mockEnv.failRawArchive = true;
-    await writeRecording(gameId);
-
-    const result = await archiveGameData('exp-test');
-
-    // The capture failure did not take the rest of the archive down.
-    expect(result).not.toBeNull();
-    await expect(fs.access(result!.savePath)).resolves.toBeUndefined();
-  });
-
   it('keeps the finalized source when raw package publication fails', async () => {
     const gameId = mockEnv.gameId;
     mockEnv.failRawArchive = true;
@@ -150,6 +138,7 @@ describe('archiveGameData capture wiring', () => {
 
     const result = await archiveGameData('exp-test');
 
+    // The capture failure does not take the rest of the archive down, and the source stays put.
     expect(result).not.toBeNull();
     await expect(fs.access(captureRoot(gameId))).resolves.toBeUndefined();
     await expect(fs.access(path.join(workDir, 'archive', 'exp-test', 'captures'))).rejects.toThrow();

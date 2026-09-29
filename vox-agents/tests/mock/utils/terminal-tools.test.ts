@@ -79,11 +79,9 @@ describe('getValidCalls', () => {
       { toolName: 'no_such_tool', invalid: true },
     ] };
     expect(getValidCalls(step).map(c => c.toolName)).toEqual(['end_turn', 'look']);
-  });
 
-  it('returns an empty array for a step with only invalid calls', () => {
-    const step = { toolCalls: [{ toolName: 'garbled', invalid: true }] };
-    expect(getValidCalls(step)).toEqual([]);
+    const onlyInvalid = { toolCalls: [{ toolName: 'garbled', invalid: true }] };
+    expect(getValidCalls(onlyInvalid)).toEqual([]);
   });
 });
 

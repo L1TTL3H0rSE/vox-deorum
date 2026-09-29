@@ -182,15 +182,14 @@ describe('Summarizer', () => {
   });
 
   describe('buildToolSummaryInstruction', () => {
-    it('includes the tool name when no inquiry is provided', () => {
-      const instruction = buildToolSummaryInstruction('get-cities');
-      expect(instruction).toContain('get-cities');
-    });
-
-    it('includes both the tool name and the inquiry when provided', () => {
-      const instruction = buildToolSummaryInstruction('get-cities', 'WHAT_IS_THE_INQUIRY');
-      expect(instruction).toContain('get-cities');
-      expect(instruction).toContain('WHAT_IS_THE_INQUIRY');
+    it.each([
+      ['no inquiry', undefined, ['get-cities']],
+      ['an inquiry', 'WHAT_IS_THE_INQUIRY', ['get-cities', 'WHAT_IS_THE_INQUIRY']],
+    ] as Array<[string, string | undefined, string[]]>)('includes the tool name and %s', (_label, inquiry, expectedParts) => {
+      const instruction = buildToolSummaryInstruction('get-cities', inquiry);
+      for (const part of expectedParts) {
+        expect(instruction).toContain(part);
+      }
     });
   });
 
@@ -238,34 +237,16 @@ describe('Summarizer', () => {
       expect(ctx.callAgent).not.toHaveBeenCalled();
     });
 
-    it('treats changed text as a distinct cache entry', async () => {
+    it.each([
+      ['text', { text: 'text A', instruction: 'do it' }, { text: 'text B', instruction: 'do it' }],
+      ['instruction', { text: 'data', instruction: 'instruction A' }, { text: 'data', instruction: 'instruction B' }],
+      ['reminder', { text: 'data', instruction: 'do it', reminder: 'remind A' }, { text: 'data', instruction: 'do it', reminder: 'remind B' }],
+    ] as Array<[string, SummarizerInput, SummarizerInput]>)('treats changed %s as a distinct cache entry', async (_label, first, second) => {
       const params = makeTelepathistParameters();
       ctx.callAgent.mockResolvedValue('summary text');
 
-      await summarizeWithCache({ text: 'text A', instruction: 'do it' }, params, ctx.asContext() as any);
-      await summarizeWithCache({ text: 'text B', instruction: 'do it' }, params, ctx.asContext() as any);
-
-      expect(ctx.callAgent).toHaveBeenCalledTimes(2);
-      expect((params.telepathistDb as any).store.size).toBe(2);
-    });
-
-    it('treats changed instruction as a distinct cache entry', async () => {
-      const params = makeTelepathistParameters();
-      ctx.callAgent.mockResolvedValue('summary text');
-
-      await summarizeWithCache({ text: 'data', instruction: 'instruction A' }, params, ctx.asContext() as any);
-      await summarizeWithCache({ text: 'data', instruction: 'instruction B' }, params, ctx.asContext() as any);
-
-      expect(ctx.callAgent).toHaveBeenCalledTimes(2);
-      expect((params.telepathistDb as any).store.size).toBe(2);
-    });
-
-    it('treats changed reminder as a distinct cache entry', async () => {
-      const params = makeTelepathistParameters();
-      ctx.callAgent.mockResolvedValue('summary text');
-
-      await summarizeWithCache({ text: 'data', instruction: 'do it', reminder: 'remind A' }, params, ctx.asContext() as any);
-      await summarizeWithCache({ text: 'data', instruction: 'do it', reminder: 'remind B' }, params, ctx.asContext() as any);
+      await summarizeWithCache(first, params, ctx.asContext() as any);
+      await summarizeWithCache(second, params, ctx.asContext() as any);
 
       expect(ctx.callAgent).toHaveBeenCalledTimes(2);
       expect((params.telepathistDb as any).store.size).toBe(2);

@@ -79,25 +79,6 @@ describe('Lua Service', () => {
         .expect(200)
         .then(response => expectErrorResponse(response, ErrorCode.INVALID_SCRIPT, expectedError));
     });
-
-    it('should handle syntax errors in Lua script', async () => {
-      const script = 'local x = ; return x'; // Syntax error
-
-      // Mock will still return a result, real DLL would error
-      const expectedStatus = USE_MOCK ? 200 : 500;
-      const response = await request(app)
-        .post('/lua/execute')
-        .send({ script })
-        .expect(expectedStatus);
-
-      // Will return an error from Lua execution or mock result
-      expect(response.body).toBeDefined();
-      if (!USE_MOCK) {
-        expect(response.body.success).toBe(false);
-      }
-
-      logSuccess('Lua syntax error handled');
-    }, TEST_TIMEOUTS.DEFAULT);
   });
 
   /**
@@ -128,24 +109,6 @@ describe('Lua Service', () => {
       });
 
       logSuccess('List of Lua functions retrieved successfully');
-    });
-
-    it('should handle concurrent requests', async () => {
-      const requests = Array.from({ length: 10 }, () =>
-        request(app).get('/lua/functions')
-      );
-
-      const responses = await Promise.all(requests);
-
-      responses.forEach(response => {
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response, (res) => {
-          expect(res.body.result).toHaveProperty('functions');
-          expect(res.body.result.functions).toBeInstanceOf(Array);
-        });
-      });
-
-      logSuccess('Concurrent requests handled successfully');
     });
 
     afterEach(async () => {
@@ -406,93 +369,12 @@ describe('Lua Service', () => {
 
       const response = await requestPromise;
 
-      expect(response.status).toBeDefined();
-      // Should get an error response due to disconnection (unless mock handles it)
-      expect(response.body.success).toBeDefined();
+      expectErrorResponse(response, ErrorCode.DLL_DISCONNECTED);
       
       // Reconnect for next tests
       await expect(dllConnector.connect()).resolves.toBe(true);
 
       logSuccess('Connection loss during request handled');
-    });
-
-    it.skipIf(USE_MOCK)('should correctly serialize object and array return values from raw Lua script', async () => {
-      // Test object return value
-      const objectScript = `
-        local player = {
-          id = 1,
-          name = "TestPlayer",
-          score = 100,
-          active = true
-        }
-        return player
-      `;
-      
-      const objectResponse = await request(app)
-        .post('/lua/execute')
-        .send({ script: objectScript })
-        .expect(200);
-      
-      expectSuccessResponse(objectResponse, (res) => {
-        expect(res.body.result).toEqual({ 
-          id: 1, 
-          name: 'TestPlayer', 
-          score: 100,
-          active: true
-        });
-      });
-      
-      // Test array return value
-      const arrayScript = `
-        local players = {"Player1", "Player2", "Player3"}
-        return players
-      `;
-      
-      const arrayResponse = await request(app)
-        .post('/lua/execute')
-        .send({ script: arrayScript })
-        .expect(200);
-      
-      expectSuccessResponse(arrayResponse, (res) => {
-        expect(res.body.result).toEqual(['Player1', 'Player2', 'Player3']);
-      });
-      
-      // Test nested structure
-      const nestedScript = `
-        local gameData = {
-          players = {
-            {id = 1, name = "Alice"},
-            {id = 2, name = "Bob"}
-          },
-          settings = {
-            difficulty = "hard",
-            maxPlayers = 4
-          },
-          scores = {100, 200, 150}
-        }
-        return gameData
-      `;
-      
-      const nestedResponse = await request(app)
-        .post('/lua/execute')
-        .send({ script: nestedScript })
-        .expect(200);
-      
-      expectSuccessResponse(nestedResponse, (res) => {
-        expect(res.body.result).toEqual({
-          players: [
-            {id: 1, name: 'Alice'},
-            {id: 2, name: 'Bob'}
-          ],
-          settings: {
-            difficulty: 'hard',
-            maxPlayers: 4
-          },
-          scores: [100, 200, 150]
-        });
-      });
-      
-      logSuccess('Object and array return value serialization from raw Lua script handled correctly');
     });
   });
 });

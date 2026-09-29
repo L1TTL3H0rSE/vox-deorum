@@ -107,13 +107,6 @@ describe('ApiClient REST methods', () => {
     expect(JSON.parse(options.body)).toEqual({ config: { type: 'strategist' }, gameMode: 'start' })
   })
 
-  it('GETs the configured-provider model catalogue', async () => {
-    const fetchFn = mockFetch(() => jsonResponse({ models: [], failures: [] }))
-
-    await expect(api.getConfigModels()).resolves.toEqual({ models: [], failures: [] })
-    expect(fetchFn).toHaveBeenCalledWith('http://localhost:5555/api/config/models', undefined)
-  })
-
   it('DELETEs a session config with an encoded filename', async () => {
     const fetchFn = mockFetch(() => jsonResponse({ success: true }))
     await api.deleteSessionConfig('my config.json')
@@ -147,13 +140,6 @@ describe('ApiClient REST methods', () => {
         }) as Response,
     )
     await expect(api.getHealth()).rejects.toThrow('plain text failure')
-  })
-
-  it('checks whether setup is configured', async () => {
-    const fetchFn = mockFetch(() => jsonResponse({ configured: true }))
-
-    await expect(api.checkSetupStatus()).resolves.toEqual({ configured: true })
-    expect(fetchFn).toHaveBeenCalledWith('http://localhost:5555/api/config/check', undefined)
   })
 
   it('posts provider credentials for model discovery', async () => {

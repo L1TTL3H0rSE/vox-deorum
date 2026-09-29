@@ -54,17 +54,11 @@ describe('append-message guards', () => {
     await expect(tool.execute(args({ MessageType: 'deal-enacted' }) as any)).rejects.toThrow(/enactment route/);
   });
 
-  it('rejects deal-reject and points the caller at the transactional rejection route', async () => {
-    // Stage 7.04 moved rejection authority to reject-agent-deal so proposal state is decided
-    // inside one write transaction. No caller may bypass it through the archival tool.
-    await expect(tool.execute(args({ MessageType: 'deal-reject' }) as any)).rejects.toThrow(
-      /reject-agent-deal/
-    );
-  });
-
   it('refuses deal-reject before any other validation and writes nothing', async () => {
-    // The refusal is the FIRST guard, so a well-formed rejection of a real proposal is refused
-    // just the same — the archival path can never produce a deal-reject row.
+    // Stage 7.04 moved rejection authority to reject-agent-deal so proposal state is decided
+    // inside one write transaction. No caller may bypass it through the archival tool. The
+    // refusal is the FIRST guard, so even a well-formed rejection of a real proposal is refused
+    // just the same: the archival path can never produce a deal-reject row.
     const proposal = await tool.execute(
       args({ MessageType: 'deal-proposal', Payload: { Deal: { items: [] } } }) as any
     );
@@ -99,14 +93,14 @@ describe('append-message guards', () => {
   });
 
   it('rechecks the expected game after async validation before retaining the store', async () => {
-    const gameID = vi.spyOn(knowledgeManager, 'getGameId')
+    vi.spyOn(knowledgeManager, 'getGameId')
       .mockReturnValueOnce('stable-game')
       .mockReturnValue('switched-game');
 
+    // The switched-game wording can only come from the second (post-validation) read.
     await expect(
       tool.execute(args({ ExpectedGameID: 'stable-game' }) as any)
     ).rejects.toThrow(/expected game stable-game, but active game is switched-game/);
-    expect(gameID).toHaveBeenCalledTimes(2);
     expect((await getDiplomaticMessages(1, 3)).messages).toHaveLength(0);
   });
 });

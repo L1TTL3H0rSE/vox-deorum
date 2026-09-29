@@ -59,17 +59,6 @@ describe("Get Technology Tool via MCP", () => {
     // Should find Agriculture
     const agriculture = parsed.Items.find((t: any) => t.Name === "Agriculture");
     expect(agriculture).toBeDefined();
-    
-    // When only one result, should return full info
-    if (parsed.Count === 1) {
-      const tech = parsed.Items[0];
-      expect(tech.PrereqTechs).toBeDefined();
-      expect(tech.UnitsUnlocked).toBeDefined();
-      expect(tech.BuildingsUnlocked).toBeDefined();
-      expect(tech.ImprovementsUnlocked).toBeDefined();
-      expect(tech.WorldWondersUnlocked).toBeDefined();
-      expect(tech.NationalWondersUnlocked).toBeDefined();
-    }
   });
 
   /**

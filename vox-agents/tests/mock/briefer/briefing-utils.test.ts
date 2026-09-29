@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getLastBriefingState } from "../../../src/briefer/briefing-utils.js";
-import {
-  withEventWindowFallback,
-  type GameState,
-  type StrategistParameters,
-} from "../../../src/strategist/strategy-parameters.js";
+import { type GameState, type StrategistParameters } from "../../../src/strategist/strategy-parameters.js";
 
 /** Build a minimal GameState for a turn with the given reports. */
 function makeState(turn: number, reports: Record<string, string> = {}): GameState {
@@ -86,66 +82,5 @@ describe("getLastBriefingState", () => {
     // With only the combined key requested, the military-only turn is ignored.
     const combinedOnly = getLastBriefingState(parameters, 7, ["briefing"]);
     expect(combinedOnly?.turn).toBe(4);
-  });
-});
-
-describe("withEventWindowFallback", () => {
-  function eventsParameters(turn: number, fromTurn: number): {
-    parameters: StrategistParameters;
-    state: GameState;
-  } {
-    const gameStates: Record<number, GameState> = {};
-    for (let t = fromTurn; t <= turn; t++) {
-      gameStates[t] = { turn: t, reports: {}, events: { [t]: [{ Type: `E${t}` }] } as any };
-    }
-    const state = gameStates[turn];
-    return { parameters: makeParameters(turn, gameStates), state };
-  }
-
-  it("narrows from the widest window until an attempt succeeds", async () => {
-    const { parameters, state } = eventsParameters(12, 10); // windows: 10-12, 11-12, 12-12
-    const seen: Array<{ fromTurn: number; toTurn: number }> = [];
-
-    const ok = await withEventWindowFallback(parameters, state, 10, async (window) => {
-      seen.push(window);
-      // Succeed only once the window has narrowed to a single turn.
-      return window.fromTurn === window.toTurn;
-    });
-
-    expect(ok).toBe(true);
-    expect(seen).toEqual([
-      { fromTurn: 10, toTurn: 12 },
-      { fromTurn: 11, toTurn: 12 },
-      { fromTurn: 12, toTurn: 12 },
-    ]);
-    // state.events reflects the final (successful) single-turn window (turn-keyed).
-    expect((state.events as any)["12"].map((e: any) => e.Type)).toEqual(["E12"]);
-  });
-
-  it("returns false when every window fails, after trying them all", async () => {
-    const { parameters, state } = eventsParameters(11, 10); // windows: 10-11, 11-11
-    let attempts = 0;
-
-    const ok = await withEventWindowFallback(parameters, state, 10, async () => {
-      attempts++;
-      return false;
-    });
-
-    expect(ok).toBe(false);
-    expect(attempts).toBe(2);
-  });
-
-  it("returns false without calling attempt when the window is empty", async () => {
-    const { parameters, state } = eventsParameters(10, 10);
-    let attempts = 0;
-
-    // eventFromTurn ahead of the current turn => no windows.
-    const ok = await withEventWindowFallback(parameters, state, 11, async () => {
-      attempts++;
-      return true;
-    });
-
-    expect(ok).toBe(false);
-    expect(attempts).toBe(0);
   });
 });

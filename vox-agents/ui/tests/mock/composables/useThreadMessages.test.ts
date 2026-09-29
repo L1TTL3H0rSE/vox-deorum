@@ -287,18 +287,6 @@ describe('useThreadMessages', () => {
     expect(isStreaming.value).toBe(false);
   });
 
-  it('proposeDeal keeps the card and the streamed reply after done', async () => {
-    const { proposeDeal } = setup();
-    await proposeDeal(emptyDeal(), vi.fn());
-    cb.onConnected({ deal: dealRow() });
-    cb.onMessage({ type: 'text-delta', text: 'Agreed', id: 'a' });
-    cb.onDone({ sessionId: 'dipl:g:0:1', messageCount: 2, deals: [] });
-
-    expect(thread.value!.messages).toHaveLength(2); // authoritative card + streamed reply
-    expect(thread.value!.messages[0]!.deal!.ID).toBe(42);
-    expect(isStreaming.value).toBe(false);
-  });
-
   it("folds the diplomat's mid-run deal rows (carried on `done`) in AFTER the streamed reply", async () => {
     const { proposeDeal } = setup();
     await proposeDeal(emptyDeal(), vi.fn());

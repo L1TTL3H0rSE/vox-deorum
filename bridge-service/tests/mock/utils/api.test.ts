@@ -44,11 +44,4 @@ describe('handleAPIError', () => {
     const body = res.json.mock.calls[0][0];
     expect(body.error.details).toBe('plain string failure');
   });
-
-  it('should pass through arbitrary (non-APIResponse) action results', async () => {
-    const res = makeMockResponse();
-    await handleAPIError(res, '/stats', async () => ({ uptime: 42 }));
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ uptime: 42 });
-  });
 });

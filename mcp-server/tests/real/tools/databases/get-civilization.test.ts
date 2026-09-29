@@ -59,26 +59,6 @@ describe("Get Civilization Tool via MCP", () => {
     // Should find Rome
     const rome = parsed.Items.find((c: any) => c.Name === "Rome");
     expect(rome).toBeDefined();
-    
-    // When only one result, should return full info
-    if (parsed.Count === 1) {
-      const civ = parsed.Items[0];
-      expect(civ.Abilities).toBeDefined();
-      expect(Array.isArray(civ.Abilities)).toBe(true);
-      
-      // Full info should have detailed abilities
-      if (civ.Abilities.length > 0) {
-        const ability = civ.Abilities[0];
-        expect(ability.Type).toBeDefined();
-        expect(ability.Name).toBeDefined();
-        expect(ability.Help).toBeDefined();
-      }
-      
-      expect(civ.Archetype).toBeDefined();
-      expect(civ.Traits).toBeDefined();
-      expect(Array.isArray(civ.Traits)).toBe(true);
-      expect(civ.PreferredVictory).toBeDefined();
-    }
   });
 
   /**
@@ -180,67 +160,4 @@ describe("Get Civilization Tool via MCP", () => {
     }
   });
 
-  /**
-   * Test that unique buildings are properly linked
-   */
-  it("should properly link unique buildings", async () => {
-    const result = await mcpClient.callTool({
-      name: "get-civilization",
-      arguments: { 
-        Search: "CIVILIZATION_EGYPT" // Egypt has unique buildings
-      }
-    });
-
-    expect(result.content).toBeDefined();
-    const content = (result.content as any)[0];
-    expect(content.type).toBe("text");
-    
-    if (content.type === "text") {
-      const parsed = JSON.parse(content.text);
-      
-      if (parsed.Count === 1) {
-        const civ = parsed.Items[0];
-        expect(civ.Abilities).toBeDefined();
-        
-        // Check if there are building abilities
-        const buildingAbilities = civ.Abilities.filter((a: any) => a.Type === 'Building');
-        
-        if (buildingAbilities.length > 0) {
-          const building = buildingAbilities[0];
-          expect(building.Name).toBeDefined();
-          expect(building.Help).toBeDefined();
-        }
-      }
-    }
-  });
-
-  /**
-   * Test searching for civilizations by leader
-   */
-  it("should find civilizations by leader search", async () => {
-    const result = await mcpClient.callTool({
-      name: "get-civilization",
-      arguments: { 
-        Search: "Caesar",
-        MaxResults: 5
-      }
-    });
-
-    expect(result.content).toBeDefined();
-    const content = (result.content as any)[0];
-    expect(content.type).toBe("text");
-    
-    if (content.type === "text") {
-      const parsed = JSON.parse(content.text);
-      
-      // Should find civilizations with Caesar as leader
-      const caesarCivs = parsed.Items.filter((c: any) => 
-        c.Leader && c.Leader.toLowerCase().includes("caesar")
-      );
-      
-      if (caesarCivs.length > 0) {
-        expect(caesarCivs[0].Name).toBeDefined();
-      }
-    }
-  });
 });

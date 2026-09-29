@@ -19,49 +19,27 @@ function makeConfig(llmPlayers: StrategistSessionConfig['llmPlayers']): Strategi
 }
 
 describe('isVisualMode', () => {
-  it('should return true for test mode', () => {
-    expect(isVisualMode('test')).toBe(true);
+  it.each([
+    ['test mode', 'test', true],
+    ['livestream mode', 'livestream', true],
+    ['recording mode', 'recording', true],
+    ['none mode', 'none', false],
+    ['undefined', undefined, false],
+  ] as Array<[string, Parameters<typeof isVisualMode>[0], boolean]>)('should return the expected result for %s', (_label, mode, expected) => {
+    expect(isVisualMode(mode)).toBe(expected);
   });
-
-  it('should return true for livestream mode', () => {
-    expect(isVisualMode('livestream')).toBe(true);
-  });
-
-  it('should return true for recording mode', () => {
-    expect(isVisualMode('recording')).toBe(true);
-  });
-
-  it('should return false for none mode', () => {
-    expect(isVisualMode('none')).toBe(false);
-  });
-
-  it('should return false for undefined', () => {
-    expect(isVisualMode(undefined)).toBe(false);
-  });
-
 });
 
 describe('isObsMode', () => {
-  it('should return true for livestream mode', () => {
-    expect(isObsMode('livestream')).toBe(true);
+  it.each([
+    ['livestream mode', 'livestream', true],
+    ['recording mode', 'recording', true],
+    ['test mode', 'test', false],
+    ['none mode', 'none', false],
+    ['undefined', undefined, false],
+  ] as Array<[string, Parameters<typeof isObsMode>[0], boolean]>)('should return the expected result for %s', (_label, mode, expected) => {
+    expect(isObsMode(mode)).toBe(expected);
   });
-
-  it('should return true for recording mode', () => {
-    expect(isObsMode('recording')).toBe(true);
-  });
-
-  it('should return false for test mode', () => {
-    expect(isObsMode('test')).toBe(false);
-  });
-
-  it('should return false for none mode', () => {
-    expect(isObsMode('none')).toBe(false);
-  });
-
-  it('should return false for undefined', () => {
-    expect(isObsMode(undefined)).toBe(false);
-  });
-
 });
 
 describe('isHumanControl', () => {

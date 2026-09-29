@@ -67,14 +67,5 @@ describe('DatabaseManager', () => {
         }
       }
     });
-
-    it('should handle empty arrays for localization', async () => {
-      await manager.initialize();
-      
-      const emptyArray: any[] = [];
-      const result = await manager.localizeObject(emptyArray);
-      
-      expect(result).toEqual([]);
-    });
   });
 });

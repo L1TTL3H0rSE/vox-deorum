@@ -1335,38 +1335,18 @@ describe('agent routes', () => {
     });
   });
 
-  describe('mutating endpoints on unknown threads', () => {
-    it('DELETE returns 404', async () => {
-      const res = await request(app).delete('/api/agents/chat/missing');
-      expect(res.status).toBe(404);
-    });
-
-    it('close returns 404', async () => {
-      const res = await request(app).post('/api/agents/chat/missing/close').send({});
-      expect(res.status).toBe(404);
-    });
-  });
-
-  describe('typed deal-action endpoints on unknown threads', () => {
+  describe('endpoints on unknown threads', () => {
     // Propose/counter are no longer typed routes — they commit through POST /api/agents/message with a
     // `deal` body (the streaming chat path), covered in the diplomacy block below.
-    it('inspect returns 404', async () => {
-      const res = await request(app).post('/api/agents/chat/missing/deal/inspect').send({});
-      expect(res.status).toBe(404);
-    });
-
-    it('reject returns 404', async () => {
-      const res = await request(app).post('/api/agents/chat/missing/deal/reject').send({ proposalMessageID: 1 });
-      expect(res.status).toBe(404);
-    });
-
-    it('accept returns 404', async () => {
-      const res = await request(app).post('/api/agents/chat/missing/deal/accept').send({ proposalMessageID: 1 });
-      expect(res.status).toBe(404);
-    });
-
-    it('list deals returns 404', async () => {
-      const res = await request(app).get('/api/agents/chat/missing/deals');
+    it.each([
+      ['DELETE chat', () => request(app).delete('/api/agents/chat/missing')],
+      ['close', () => request(app).post('/api/agents/chat/missing/close').send({})],
+      ['deal/inspect', () => request(app).post('/api/agents/chat/missing/deal/inspect').send({})],
+      ['deal/reject', () => request(app).post('/api/agents/chat/missing/deal/reject').send({ proposalMessageID: 1 })],
+      ['deal/accept', () => request(app).post('/api/agents/chat/missing/deal/accept').send({ proposalMessageID: 1 })],
+      ['GET deals', () => request(app).get('/api/agents/chat/missing/deals')],
+    ] as Array<[string, () => Promise<any>]>)('%s returns 404 on an unknown thread', async (_label, call) => {
+      const res = await call();
       expect(res.status).toBe(404);
     });
   });

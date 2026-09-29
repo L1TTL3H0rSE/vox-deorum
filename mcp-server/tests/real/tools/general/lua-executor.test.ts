@@ -18,14 +18,9 @@ describe("Lua Executor Tool via MCP", () => {
         arguments: { Script: test.Script }
       });
 
-      expect(result.content).toBeDefined();
-      expect((result.content as any)).toBeDefined();
-      
-      const content = (result.content as any);
-      if (content.type === "text") {
-        const parsed = JSON.parse(content.text);
-        expect(parsed.Result).toBe(test.expected);
-      }
+      const content = (result.content as any)[0];
+      expect(content.type).toBe("text");
+      expect(JSON.parse(content.text).Result).toBe(test.expected);
     }
   });
 

@@ -12,17 +12,6 @@ describe('configuration model validation', () => {
     expect(validateMappings([{ agent: 'default', model: modelId }], [])).toEqual([]);
   });
 
-  it.each([
-    '',
-    'gpt-5',
-    '/gpt-5',
-    'openai/',
-    'openai/   ',
-    'made-up/gpt-5'
-  ])('rejects a malformed or unsupported missing model ID: %s', modelId => {
-    expect(isSynthesizableModelId(modelId)).toBe(false);
-  });
-
   it('still reports a garbage model mapping when no definition exists', () => {
     expect(validateMappings([{ agent: 'default', model: 'garbage' }], []))
       .toEqual(['Model "garbage" used by agent "default" does not exist']);

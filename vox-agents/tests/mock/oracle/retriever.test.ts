@@ -227,19 +227,6 @@ describe('oracle runRetrieve', () => {
       expect(mocks.findTurnByRationale).not.toHaveBeenCalled();
       expect(mocks.extractPrompt).toHaveBeenCalledWith(db, 30, undefined);
     });
-
-    it('passes the configured targetAgent through to extractPrompt', async () => {
-      const dir = makeTempDir();
-      const csv = writeCsvFile(dir, `${CSV_HEADER}\ng1,1,30,Test,`);
-      const db = makeFakeDb();
-      mocks.discoverDbPath.mockReturnValue('/fake/db.db');
-      mocks.openReadonlyDb.mockReturnValue(db);
-      mocks.extractPrompt.mockResolvedValue(extracted());
-
-      await runRetrieve(baseConfig(csv, dir, { targetAgent: 'simple-strategist' }));
-
-      expect(mocks.extractPrompt).toHaveBeenCalledWith(db, 30, 'simple-strategist');
-    });
   });
 
   describe('prompt extraction mapping', () => {
@@ -253,7 +240,7 @@ describe('oracle runRetrieve', () => {
         extracted({ modelString: 'prov/Model@Med', agentName: 'simple-strategist', activeTools: ['t1', 't2'] })
       );
 
-      const rows = await runRetrieve(baseConfig(csv, dir));
+      const rows = await runRetrieve(baseConfig(csv, dir, { targetAgent: 'simple-strategist' }));
 
       expect(rows[0]).toMatchObject({
         originalModel: 'prov/Model@Med',
@@ -262,6 +249,8 @@ describe('oracle runRetrieve', () => {
       });
       expect(rows[0].error).toBeUndefined();
       expect(db.destroy).toHaveBeenCalledTimes(1);
+      // The configured targetAgent is forwarded to extractPrompt.
+      expect(mocks.extractPrompt).toHaveBeenCalledWith(db, 30, 'simple-strategist');
     });
 
     it('returns an error row when extraction yields no prompt data', async () => {

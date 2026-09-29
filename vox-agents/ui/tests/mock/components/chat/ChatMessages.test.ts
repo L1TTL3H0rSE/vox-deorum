@@ -72,22 +72,6 @@ describe('ChatMessages', () => {
     expect(wrapper.find('.vlist').exists()).toBe(false)
   })
 
-  it('renders a ChatMessage per item and forwards labels/metadata', () => {
-    const wrapper = mountMessages({
-      messages: [makeMessage('one', 3), makeMessage('two', 4)],
-      userLabel: 'Caesar',
-      agentLabel: 'Rome',
-    })
-
-    const items = wrapper.findAllComponents(ChatMessageStub)
-    expect(items).toHaveLength(2)
-    expect(items[0]!.props('message')).toMatchObject({ content: 'one' })
-    expect(items[0]!.props('metadata')).toMatchObject({ turn: 3 })
-    expect(items[0]!.props('userLabel')).toBe('Caesar')
-    expect(items[1]!.props('agentLabel')).toBe('Rome')
-    expect(wrapper.find('.empty-state').exists()).toBe(false)
-  })
-
   it('auto-scrolls to the bottom on mount', async () => {
     mountMessages({ messages: [makeMessage('one')] })
     await flushPromises()

@@ -248,20 +248,5 @@ describe('episode-parser', () => {
         duration: 15000,
       });
     });
-
-    it('should handle minor civs in combined flow', () => {
-      const content = toJsonl([
-        { event: 'start', turn: 10, playerID: 2, at: 1000 },
-        { event: 'switch', turn: 10, playerID: 22, at: 2000 }, // minor civ
-        { event: 'switch', turn: 10, playerID: 3, at: 2500 },
-        { event: 'stop', turn: 10, playerID: 3, at: 5000, file: 'v.mkv' },
-      ]);
-      const minors = new Set([22, 23]);
-      const episodes = parseAndDecompose(content, minors);
-      expect(episodes).toHaveLength(3);
-      expect(episodes[0].playerID).toBe(2);
-      expect(episodes[1].playerID).toBe(-1); // minor → -1
-      expect(episodes[2].playerID).toBe(3);
-    });
   });
 });

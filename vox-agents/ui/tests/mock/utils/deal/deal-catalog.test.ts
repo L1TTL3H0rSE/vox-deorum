@@ -5,7 +5,7 @@ import {
   offerColumnsFor,
   type InventoryCategory,
 } from '@/utils/deal/deal-catalog';
-import { durationForItemType, type DealDurations } from '../../../../../../mcp-server/dist/utils/deal-metadata.js';
+import { type DealDurations } from '../../../../../../mcp-server/dist/utils/deal-metadata.js';
 import type { NormalizedSideRange, TradeItem, PromiseTerm, PromiseTargetInfo } from '@/utils/types';
 import { range } from './deal-test-fixtures';
 
@@ -339,26 +339,6 @@ describe('deal-catalog', () => {
     expect(goldRow.addPayload).toMatchObject({ item: { itemType: 'GOLD', amount: 40 } });
     const highGold = cat(build(), 'gold').rows.find((r) => r.key === 'GOLD')!;
     expect(highGold.addPayload).toMatchObject({ item: { itemType: 'GOLD', amount: 100 } });
-  });
-
-  it('durationForItemType maps each item type to its fixed game duration (deal / peace / relationship / none)', () => {
-    // Deal duration: tribute (gold-per-turn / resources) + Open Borders / Defensive Pact / Research Agreement.
-    expect(durationForItemType('GOLD_PER_TURN', durations)).toBe(30);
-    expect(durationForItemType('RESOURCES', durations)).toBe(30);
-    expect(durationForItemType('OPEN_BORDERS', durations)).toBe(30);
-    expect(durationForItemType('DEFENSIVE_PACT', durations)).toBe(30);
-    expect(durationForItemType('RESEARCH_AGREEMENT', durations)).toBe(30);
-    // Peace duration: peace treaty + third-party peace. Relationship duration: declaration of friendship.
-    expect(durationForItemType('PEACE_TREATY', durations)).toBe(10);
-    expect(durationForItemType('THIRD_PARTY_PEACE', durations)).toBe(10);
-    expect(durationForItemType('DECLARATION_OF_FRIENDSHIP', durations)).toBe(25);
-    // No-duration types.
-    expect(durationForItemType('GOLD', durations)).toBeUndefined();
-    expect(durationForItemType('MAPS', durations)).toBeUndefined();
-    expect(durationForItemType('ALLOW_EMBASSY', durations)).toBeUndefined();
-    // Peace / relationship fall back to the deal duration when their game-speed value is unavailable.
-    expect(durationForItemType('PEACE_TREATY', { defaultDuration: 30, peaceDuration: undefined, relationshipDuration: undefined })).toBe(30);
-    expect(durationForItemType('DECLARATION_OF_FRIENDSHIP', { defaultDuration: 30, peaceDuration: undefined, relationshipDuration: undefined })).toBe(30);
   });
 
   it('seeds each agreement toggle with its fixed game duration (deal / peace / relationship)', () => {

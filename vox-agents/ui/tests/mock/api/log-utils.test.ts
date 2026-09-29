@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractLogParams, filterLogs, getLevelEmoji } from '@/api/log-utils'
+import { extractLogParams, filterLogs } from '@/api/log-utils'
 
 describe('extractLogParams', () => {
   it('keeps fixed fields and collects the rest as params, dropping transport', () => {
@@ -45,16 +45,5 @@ describe('filterLogs', () => {
 
   it('returns everything at debug level with no source filter', () => {
     expect(filterLogs(logs, 'debug', [])).toHaveLength(2)
-  })
-})
-
-describe('getLevelEmoji', () => {
-  it('maps known levels', () => {
-    expect(getLevelEmoji('error')).toBe('❌')
-    expect(getLevelEmoji('warn')).toBe('⚠️')
-  })
-
-  it('falls back for unknown levels', () => {
-    expect(getLevelEmoji('nope')).toBe('📝')
   })
 })

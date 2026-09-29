@@ -55,26 +55,19 @@ describe('CentralOffer', () => {
     expect(wrapper.emitted('update-item')![0]).toEqual([0, { amount: 120 }]);
   });
 
-  it('caps the gold-per-turn editor at the giver’s net income (netGoldPerTurn)', () => {
-    const wrapper = mountOffer({
-      items: [{ fromPlayerID: 0, toPlayerID: 1, itemType: 'GOLD_PER_TURN', amount: 10, duration: 30 }],
-      inspectedItems: [inspected({ itemType: 'GOLD_PER_TURN', valueIfIGive: 10, valueIfIReceive: 10 })],
-    });
-    const num = wrapper.find('.number-stub');
+  it.each([
     // netGoldPerTurn = 42 in the fixture → the GPT input clamps to [1, 42].
-    expect(num.attributes('max')).toBe('42');
-    expect(num.attributes('min')).toBe('1');
-  });
-
-  it('caps the gold editor at the giver’s treasury (gold.max)', () => {
+    { itemType: 'GOLD_PER_TURN', amount: 10, min: '1', max: '42' },
+    // gold.max = 500 in the fixture; gold's floor is 0.
+    { itemType: 'GOLD', amount: 50, min: '0', max: '500' },
+  ])('caps the $itemType amount editor at the giver’s limit', ({ itemType, amount, min, max }) => {
     const wrapper = mountOffer({
-      items: [{ fromPlayerID: 0, toPlayerID: 1, itemType: 'GOLD', amount: 50 }],
-      inspectedItems: [inspected({ itemType: 'GOLD', valueIfIGive: 50, valueIfIReceive: 50 })],
+      items: [{ fromPlayerID: 0, toPlayerID: 1, itemType, amount }],
+      inspectedItems: [inspected({ itemType, valueIfIGive: amount, valueIfIReceive: amount })],
     });
     const num = wrapper.find('.number-stub');
-    // gold.max = 500 in the fixture; gold's floor is 0.
-    expect(num.attributes('max')).toBe('500');
-    expect(num.attributes('min')).toBe('0');
+    expect(num.attributes('max')).toBe(max);
+    expect(num.attributes('min')).toBe(min);
   });
 
   it('emits remove-promise for a pledged promise row', async () => {

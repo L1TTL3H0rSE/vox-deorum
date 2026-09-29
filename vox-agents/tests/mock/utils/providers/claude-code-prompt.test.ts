@@ -85,18 +85,15 @@ describe('claudeCodeSystemMiddleware', () => {
     expect(out[0].content).toBe('S1\n\nS2');
   });
 
-  it('is a no-op (returns params untouched) when there is at most one system message', async () => {
+  it('is a no-op (returns params untouched) for an empty prompt or at most one system message', async () => {
     const mw = claudeCodeSystemMiddleware();
+    const empty = { prompt: [] };
+    expect(await (mw.transformParams as any)({ params: empty })).toBe(empty);
+
     const prompt = [system('S1'), user('U1')];
     const params = { prompt, tools: [] };
     const out = await (mw.transformParams as any)({ params });
     // Same reference back: the trivial case avoids rebuilding the prompt.
     expect(out).toBe(params);
-  });
-
-  it('is a no-op for an empty prompt', async () => {
-    const mw = claudeCodeSystemMiddleware();
-    const params = { prompt: [] };
-    expect(await (mw.transformParams as any)({ params })).toBe(params);
   });
 });

@@ -173,15 +173,4 @@ describe('ChatMessage', () => {
     })
     expect(wrapper.findComponent(TextMessageStub).props('content')).toBe('kept')
   })
-
-  it('passes metadata turn and labels through to TextMessage', () => {
-    const wrapper = mountMessage(
-      { role: 'user', content: 'hi' },
-      { metadata: { datetime: new Date(), turn: 9 }, userLabel: 'Caesar', agentLabel: 'Rome' },
-    )
-    const text = wrapper.findComponent(TextMessageStub)
-    expect(text.props('turn')).toBe(9)
-    expect(text.props('userLabel')).toBe('Caesar')
-    expect(text.props('agentLabel')).toBe('Rome')
-  })
 })

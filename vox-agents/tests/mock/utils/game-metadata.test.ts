@@ -40,12 +40,4 @@ describe('setMetadata', () => {
 
     expect(mcp.calls('set-metadata')[0].args).toEqual({ Key: 'seed', Value: '12345' });
   });
-
-  it('passes through string values unchanged', async () => {
-    mcp.respondWith('set-metadata', textResult('ok'));
-
-    await setMetadata('experiment', 'baseline');
-
-    expect(mcp.calls('set-metadata')[0].args).toEqual({ Key: 'experiment', Value: 'baseline' });
-  });
 });

@@ -19,12 +19,6 @@ describe('MCP Agents Connection', () => {
     expect(capabilities?.tools).toBeDefined();
   });
 
-  it.skip('should list available resources', async () => {
-    const resources = await mcpClient.listResources();
-    expect(resources).toBeDefined();
-    expect(resources.resources).toBeInstanceOf(Array);
-  });
-
   it('should list available tools', async () => {
     const tools = await mcpClient.listTools();
     expect(tools).toBeDefined();

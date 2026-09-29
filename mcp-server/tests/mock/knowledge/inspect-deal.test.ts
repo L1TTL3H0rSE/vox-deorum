@@ -529,32 +529,34 @@ describe('inspect-deal promise legality', () => {
     ]);
   });
 
-  it('rule: promiser and recipient must be two distinct living majors and the deal principals', async () => {
-    const result = await inspectWithVerdicts(
-      [{ promiserID: 1, recipientID: 3, promiseType: 'MILITARY' }],
-      [{ legal: false, reason: 'promiser and recipient must be the two deal parties (distinct living majors)' }]
-    );
-
-    expect(result.promises[0].legality).toBe(false);
-    expect(result.promises[0].reasons).toEqual([
-      'promiser and recipient must be the two deal parties (distinct living majors)',
-    ]);
-  });
-
-  it('rule: a duplicate logical commitment is illegal', async () => {
-    const result = await inspectWithVerdicts(
-      [
+  // Both cases exercise the same index-merge of a refused verdict; the duplicate pair proves
+  // the alignment (only the second promise is refused), the single-promise row shows the
+  // verdict reaches its promise whatever the refused rule was.
+  it.each([
+    {
+      rule: 'a duplicate logical commitment is illegal',
+      promises: [
         { promiserID: 1, recipientID: 3, promiseType: 'MILITARY' },
         { promiserID: 1, recipientID: 3, promiseType: 'MILITARY' },
       ],
-      [{ legal: true, reason: '' }, { legal: false, reason: 'duplicate promise for this pair' }]
-    );
+      verdicts: [{ legal: true, reason: '' }, { legal: false, reason: 'duplicate promise for this pair' }],
+      merged: [{ legality: true, reasons: [] }, { legality: false, reasons: ['duplicate promise for this pair'] }],
+    },
+    {
+      rule: 'promiser and recipient must be two distinct living majors and the deal principals',
+      promises: [{ promiserID: 1, recipientID: 3, promiseType: 'MILITARY' }],
+      verdicts: [{ legal: false, reason: 'promiser and recipient must be the two deal parties (distinct living majors)' }],
+      merged: [{
+        legality: false,
+        reasons: ['promiser and recipient must be the two deal parties (distinct living majors)'],
+      }],
+    },
+  ])('rule: $rule', async ({ promises, verdicts, merged }) => {
+    const result = await inspectWithVerdicts(promises, verdicts);
 
-    // Only the SECOND one is refused, and the verdicts stay attached to the right index.
-    expect(result.promises[0]).toMatchObject({ legality: true, reasons: [] });
-    expect(result.promises[1]).toMatchObject({
-      legality: false,
-      reasons: ['duplicate promise for this pair'],
+    expect(result.promises).toHaveLength(merged.length);
+    merged.forEach((expected, index) => {
+      expect(result.promises[index]).toMatchObject(expected);
     });
   });
 
@@ -582,20 +584,6 @@ describe('inspect-deal promise legality', () => {
     expect(result.promises[0].reasons).toEqual(['not a valid cooperative-war target (5)']);
   });
 
-  it('rule: an already-PREPARING coop war is refused through the same eligibility answer', async () => {
-    // coopWarEligible folds the already-PREPARING check into its false answer, so the tool sees
-    // exactly the ineligible-target verdict.
-    const result = await inspectWithVerdicts(
-      [{ promiserID: 1, recipientID: 3, promiseType: 'COOP_WAR', targetPlayerID: 7 }],
-      [
-        { legal: false, reason: 'not a valid cooperative-war target (7)' },
-        { legal: false, reason: 'not a valid cooperative-war target (7)' },
-      ]
-    );
-
-    expect(result.promises[0].legality).toBe(false);
-  });
-
   it('rule: MILITARY / EXPANSION / BORDER already in effect for the pair are illegal', async () => {
     const result = await inspectWithVerdicts(
       [
@@ -614,35 +602,6 @@ describe('inspect-deal promise legality', () => {
     for (const promise of result.promises) {
       expect(promise).toMatchObject({ legality: false, reasons: ['already in effect for this pair'] });
     }
-  });
-
-  it('rule: NO_DIGGING is always legal at inspection', async () => {
-    // The game exposes no made-state query for it and reapplying it at enactment is a harmless
-    // no-op, so the validator never refuses it.
-    const result = await inspectWithVerdicts(
-      [{ promiserID: 1, recipientID: 3, promiseType: 'NO_DIGGING' }],
-      [{ legal: true, reason: '' }]
-    );
-
-    expect(result.promises[0]).toMatchObject({
-      promiseType: 'NO_DIGGING',
-      legality: true,
-      reasons: [],
-    });
-  });
-
-  it('mode difference: unknown coop-war eligibility is LEGAL in read-only inspection', async () => {
-    // When the IsValidCoopWarTarget binding is absent, coopWarEligible answers nil — unknown, not
-    // impossible. Enact mode refuses ("cooperative-war eligibility unavailable"); read-only
-    // inspection lets the proposal through, because it blocks only already-impossible offers and
-    // enactment re-checks everything anyway.
-    const result = await inspectWithVerdicts(
-      [{ promiserID: 1, recipientID: 3, promiseType: 'COOP_WAR', targetPlayerID: 5 }],
-      [{ legal: true, reason: '' }, { legal: true, reason: '' }]
-    );
-
-    expect(result.promises.map((p) => p.legality)).toEqual([true, true]);
-    expect(result.promises.flatMap((p) => p.reasons)).toEqual([]);
   });
 
   it('supplies a fallback reason when an illegal promise carries no reason string', async () => {

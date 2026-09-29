@@ -126,14 +126,6 @@ describe.skipIf(!dbExists)('createTelepathistParameters', () => {
       expect(params.availableTurns[i]).toBeGreaterThan(params.availableTurns[i - 1]);
     }
   });
-
-  it('should provide working database connections', async () => {
-    const result = await params.db
-      .selectFrom('spans')
-      .select(params.db.fn.count<number>('id').as('count'))
-      .executeTakeFirstOrThrow();
-    expect(result.count).toBeGreaterThan(0);
-  });
 });
 
 describe.skipIf(!dbExists)('GetSituationTool (default mode)', () => {

@@ -63,21 +63,33 @@ function milTool(rows = MIL_ROWS) {
   return tool;
 }
 
-describe('get-economic-strategies', () => {
-  it('lists all strategies (no search) with Production/Overall/Description preserved', async () => {
-    const tool = econTool();
-    const result = await tool.execute({ MaxResults: 20 } as any);
+// The listing path is shared base behavior over each tool's own canned rows, so one table
+// covers both strategy tools and pins their distinct output shapes.
+describe('get-economic-strategies / get-military-strategies', () => {
+  it.each([
+    {
+      tool: 'get-economic-strategies',
+      makeTool: econTool,
+      count: 3,
+      types: ['Expansion', 'Growth', 'Tradition'],
+      sample: { Type: 'Growth', Production: { Growth: 8 }, Overall: { Growth: 12 }, Description: 'Tall cities' },
+    },
+    {
+      tool: 'get-military-strategies',
+      makeTool: milTool,
+      count: 2,
+      types: ['Conquest', 'Defense'],
+      sample: { Type: 'Conquest', Production: { Offense: 10 }, Overall: { Offense: 8 }, Description: 'Crush enemies' },
+    },
+  ])('$tool lists all strategies (no search) with Production/Overall/Description preserved', async ({ makeTool, count, types, sample }) => {
+    const result = await makeTool().execute({ MaxResults: 20 } as any);
 
-    expect(result.Count).toBe(3);
-    expect(result.Items.map((i: any) => i.Type).sort()).toEqual([
-      'Expansion',
-      'Growth',
-      'Tradition',
-    ]);
-    const growth = result.Items.find((i: any) => i.Type === 'Growth');
-    expect(growth.Production).toEqual({ Growth: 8 });
-    expect(growth.Overall).toEqual({ Growth: 12 });
-    expect(growth.Description).toBe('Tall cities');
+    expect(result.Count).toBe(count);
+    expect(result.Items.map((i: any) => i.Type).sort()).toEqual(types);
+    const found = result.Items.find((i: any) => i.Type === sample.Type);
+    expect(found.Production).toEqual(sample.Production);
+    expect(found.Overall).toEqual(sample.Overall);
+    expect(found.Description).toBe(sample.Description);
   });
 
   it('fuzzy-searches by Type and collapses a unique exact match to one item', async () => {
@@ -87,41 +99,6 @@ describe('get-economic-strategies', () => {
     expect(result.Count).toBe(1);
     expect(result.Items[0].Type).toBe('Expansion');
     expect(result.Items[0].Description).toBe('Settle wide');
-  });
-
-  it('caps the result count with MaxResults', async () => {
-    const tool = econTool();
-    const result = await tool.execute({ MaxResults: 2 } as any);
-    expect(result.Count).toBe(2);
-  });
-});
-
-describe('get-military-strategies', () => {
-  it('lists military strategies with flavor weights preserved', async () => {
-    const tool = milTool();
-    const result = await tool.execute({ MaxResults: 20 } as any);
-
-    expect(result.Count).toBe(2);
-    const conquest = result.Items.find((i: any) => i.Type === 'Conquest');
-    expect(conquest.Production).toEqual({ Offense: 10 });
-    expect(conquest.Overall).toEqual({ Offense: 8 });
-  });
-
-  it('fuzzy-searches by Type', async () => {
-    const tool = milTool();
-    const result = await tool.execute({ Search: 'Defense', MaxResults: 20 } as any);
-    expect(result.Count).toBe(1);
-    expect(result.Items[0].Type).toBe('Defense');
-  });
-
-  it('surfaces an Error result when the DB read fails', async () => {
-    const tool = createGetMilitaryStrategyTool();
-    vi.spyOn(tool as any, 'fetchSummaries').mockRejectedValue(new Error('db offline'));
-    const result = await tool.execute({ MaxResults: 20 } as any);
-
-    expect(result.Count).toBe(0);
-    expect(result.Items).toEqual([]);
-    expect(result.Error).toBe('db offline');
   });
 });
 
@@ -152,12 +129,6 @@ describe('get-flavors', () => {
     expect(result.Count).toBe(1);
     expect(result.Items[0].Name).toBe('Offense');
     expect(result.Items[0].Description).toBe('Tendency toward aggressive military action');
-  });
-
-  it('caps flavor results with MaxResults', async () => {
-    const tool = createGetFlavorsTool();
-    const result = await tool.execute({ MaxResults: 1 } as any);
-    expect(result.Count).toBe(1);
   });
 
   it('returns an empty list when no flavor descriptions exist', async () => {

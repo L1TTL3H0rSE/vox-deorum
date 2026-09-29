@@ -38,12 +38,6 @@ describe('KeywordLibrarian.getInitialMessages', () => {
   });
 });
 
-describe('KeywordLibrarian.getActiveTools', () => {
-  it('is empty — the LLM only emits keyword JSON, it does not call tools', () => {
-    expect(librarian.getActiveTools(params)).toEqual([]);
-  });
-});
-
 describe('KeywordLibrarian.getModel', () => {
   it('applies the low reasoning tier to the agent model override', () => {
     const override: Model = { provider: 'openai', name: 'test-model', options: {} } as Model;

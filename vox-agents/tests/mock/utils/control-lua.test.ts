@@ -31,7 +31,7 @@ describe('buildAutoPlayReconcileLua', () => {
     expect(lua).toContain('elseif Game.GetActivePlayer() ~= 0 then');
     expect(lua).toContain('Game.SetAIAutoPlay(1, 0);');
     // Never re-activates in the interactive direction.
-    expect(lua).not.toContain('2000');
+    expect(lua).not.toContain(String(autoPlayTurnLimit));
   });
 
   it('targets the given human seat in every arm', () => {

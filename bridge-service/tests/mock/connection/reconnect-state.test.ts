@@ -52,6 +52,11 @@ describe('Reconnect State Restoration', () => {
       url: TEST_URLS.MOCK_SERVICE,
       async: true
     });
+    await externalManager.registerFunction({
+      name: 'syncReconnectFunction',
+      url: TEST_URLS.MOCK_SERVICE,
+      async: false
+    });
     pauseManager.registerPausedPlayer(9);
     sentMessages.length = 0;
 
@@ -67,7 +72,8 @@ describe('Reconnect State Restoration', () => {
 
     expect(sentMessages).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'external_register', name: 'reconnectFunction', async: true })
+        expect.objectContaining({ type: 'external_register', name: 'reconnectFunction', async: true }),
+        expect.objectContaining({ type: 'external_register', name: 'syncReconnectFunction', async: false })
       ])
     );
     expect(sentMessages.filter(message => message.type === 'pause_player')).toEqual([]);

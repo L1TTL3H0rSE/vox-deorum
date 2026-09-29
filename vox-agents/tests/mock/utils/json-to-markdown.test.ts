@@ -7,29 +7,15 @@ import { jsonToMarkdown, type JsonToMarkdownConfig } from '../../../src/utils/to
 
 describe('jsonToMarkdown', () => {
   describe('primitive values', () => {
-    it('should handle null values', () => {
-      const result = jsonToMarkdown(null);
-      expect(result).toBe('null');
-    });
-
-    it('should handle undefined values', () => {
-      const result = jsonToMarkdown(undefined);
-      expect(result).toBe('null');
-    });
-
-    it('should handle string values', () => {
-      const result = jsonToMarkdown('test string');
-      expect(result).toBe('- test string');
-    });
-
-    it('should handle number values', () => {
-      const result = jsonToMarkdown(42);
-      expect(result).toBe('- 42');
-    });
-
-    it('should handle boolean values', () => {
-      expect(jsonToMarkdown(true)).toBe('- true');
-      expect(jsonToMarkdown(false)).toBe('- false');
+    it.each([
+      ['null', null, 'null'],
+      ['undefined', undefined, 'null'],
+      ['string', 'test string', '- test string'],
+      ['number', 42, '- 42'],
+      ['boolean true', true, '- true'],
+      ['boolean false', false, '- false'],
+    ])('should handle %s values', (_label, value, expected) => {
+      expect(jsonToMarkdown(value)).toBe(expected);
     });
 
     it('should handle multiline strings with proper indentation', () => {
@@ -69,6 +55,12 @@ describe('jsonToMarkdown', () => {
       expect(result).toContain('  - profile:');
       expect(result).toContain('    - age: 25');
       expect(result).toContain('    - city: Boston');
+
+      const deep = { l1: { l2: { l3: { l4: { l5: { l6: { l7: 'deep value' } } } } } } };
+      const deepResult = jsonToMarkdown(deep);
+      expect(deepResult).toContain('deep value');
+      const indentCount = (deepResult.match(/^ {12}/gm) || []).length;
+      expect(indentCount).toBeGreaterThan(0); // Should have deep indentation
     });
   });
 
@@ -302,29 +294,6 @@ describe('jsonToMarkdown', () => {
       expect(result).toContain('- key2: value');
       // Undefined gets converted to 'undefined' string via String(undefined)
       expect(result).toContain('- key3: undefined');
-    });
-
-    it('should handle deeply nested structures', () => {
-      const obj = {
-        l1: {
-          l2: {
-            l3: {
-              l4: {
-                l5: {
-                  l6: {
-                    l7: 'deep value'
-                  }
-                }
-              }
-            }
-          }
-        }
-      };
-
-      const result = jsonToMarkdown(obj);
-      expect(result).toContain('deep value');
-      const indentCount = (result.match(/^ {12}/gm) || []).length;
-      expect(indentCount).toBeGreaterThan(0); // Should have deep indentation
     });
 
     it('should handle special characters in keys', () => {

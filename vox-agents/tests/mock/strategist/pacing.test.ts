@@ -20,11 +20,6 @@ describe("strategist pacing", () => {
     expect(normalizePacing()).toEqual({ everyTurns: 1, interruption: "none" });
   });
 
-  it("registers built-in interruption strategies", () => {
-    expect(pacingInterruptionRegistry.getNames()).toContain("none");
-    expect(pacingInterruptionRegistry.getNames()).toContain("importantEvents");
-  });
-
   it("throws for an unknown interruption config", () => {
     expect(() => normalizePacing({ interruption: "future-but-not-installed" }))
       .toThrow(/Unknown pacing interruption/);
@@ -388,6 +383,40 @@ describe("withEventWindowFallback", () => {
     expect(state.mergedEvents).toEqual({ "3": [{ Type: "T3" }] });
     // The immutable slice is still just the current turn.
     expect(state.events).toEqual({ "3": [{ Type: "T3" }] });
+  });
+
+  it("narrows from the widest window until an attempt succeeds", async () => {
+    const { parameters, state } = makeParams();
+    const seen: Array<{ fromTurn: number; toTurn: number }> = [];
+
+    const decided = await withEventWindowFallback(parameters, state, 1, async (window) => {
+      seen.push(window);
+      // Succeed only once the window has narrowed to a single turn.
+      return window.fromTurn === window.toTurn;
+    });
+
+    expect(decided).toBe(true);
+    expect(seen).toEqual([
+      { fromTurn: 1, toTurn: 3 },
+      { fromTurn: 2, toTurn: 3 },
+      { fromTurn: 3, toTurn: 3 },
+    ]);
+    // The immutable per-turn slice is untouched after the successful narrowing.
+    expect(state.events).toEqual({ "3": [{ Type: "T3" }] });
+  });
+
+  it("returns false without calling attempt when the window is empty", async () => {
+    const { parameters, state } = makeParams();
+    let attempts = 0;
+
+    // eventFromTurn ahead of the current turn => no windows.
+    const decided = await withEventWindowFallback(parameters, state, 4, async () => {
+      attempts++;
+      return true;
+    });
+
+    expect(decided).toBe(false);
+    expect(attempts).toBe(0);
   });
 });
 

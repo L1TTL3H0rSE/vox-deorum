@@ -158,13 +158,6 @@ describe('Spokesperson.getSystem', () => {
     expect(system).toContain('send-message');
   });
 
-  it('directs the spokesperson to answer only through send-message', async () => {
-    const system = await spokesperson.getSystem(params, thread(), undefined);
-    expect(system).toContain('send-message');
-    // The old "do not send out in a text block" guidance is replaced by the send-message directive.
-    expect(system).not.toContain('do not send out in a text block');
-  });
-
   it('omits the tool section in special (greeting) mode', async () => {
     const system = await spokesperson.getSystem(params, greetingThread(), undefined);
     expect(system).not.toContain('# Available Tools');

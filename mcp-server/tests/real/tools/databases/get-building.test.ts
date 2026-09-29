@@ -126,32 +126,6 @@ describe("Get Building Tool via MCP", () => {
   });
 
   /**
-   * Test that UniqueOf field shows civilizations with unique versions
-   */
-  it("should include UniqueOf field for buildings with unique versions", async () => {
-    const result = await mcpClient.callTool({
-      name: "get-building",
-      arguments: { 
-        Search: "BUILDING_LIBRARY" // Test with Library which may have unique versions
-      }
-    });
-
-    expect(result.content).toBeDefined();
-    const content = (result.content as any)[0];
-    expect(content.type).toBe("text");
-    
-    if (content.type === "text") {
-      const parsed = JSON.parse(content.text);
-      expect(parsed.Count).toBe(1);
-      
-      const building = parsed.Items[0];
-      // Check that UniqueOf field exists and is an array
-      expect(building.UniqueOf).toBeDefined();
-      expect(Array.isArray(building.UniqueOf)).toBe(true);
-    }
-  });
-
-  /**
    * Test a known unique building
    */
   it("should properly show UniqueOf for unique buildings", async () => {

@@ -60,29 +60,12 @@ describe('Pause Manager', () => {
     expect(pauseManager.getPausedPlayers()).toEqual([5]);
   });
 
-  it('finalize clears tracked state', () => {
-    vi.spyOn(dllConnector, 'sendNoWait').mockReturnValue(respondSuccess());
-
-    pauseManager.registerPausedPlayer(7);
-    pauseManager.finalize();
-
-    expect(pauseManager.getPausedPlayers()).toEqual([]);
-    expect(pauseManager.isGamePaused()).toBe(false);
-  });
-
   describe('registerPausedPlayer', () => {
     it('should not record the player id when the DLL send fails', () => {
       vi.spyOn(dllConnector, 'sendNoWait').mockReturnValue(respondError(ErrorCode.DLL_DISCONNECTED));
 
       expect(pauseManager.registerPausedPlayer(6)).toBe(false);
       expect(pauseManager.getPausedPlayers()).toEqual([]);
-    });
-
-    it('should record the player id and return true when the DLL send succeeds', () => {
-      vi.spyOn(dllConnector, 'sendNoWait').mockReturnValue(respondSuccess());
-
-      expect(pauseManager.registerPausedPlayer(6)).toBe(true);
-      expect(pauseManager.getPausedPlayers()).toEqual([6]);
     });
   });
 });

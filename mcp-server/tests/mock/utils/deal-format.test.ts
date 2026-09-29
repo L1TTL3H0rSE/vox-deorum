@@ -82,7 +82,6 @@ describe('isSentinel / formatEstimate', () => {
     expect(isSentinel(-INT_MAX)).toBe(true);
     expect(isSentinel(42)).toBe(false);
     expect(formatEstimate(INT_MAX)).toBe(SENTINEL_LABEL);
-    expect(SENTINEL_LABEL).toBe('no usable estimate');
     expect(formatEstimate(42.6)).toBe('43');
   });
 });

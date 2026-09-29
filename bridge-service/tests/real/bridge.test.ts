@@ -3,7 +3,7 @@ import request from 'supertest';
 import { app } from '../../src/index.js';
 import config from '../../src/utils/config.js';
 import { dllConnector } from '../../src/services/dll-connector.js';
-import { TestServer } from '../test-utils/helpers.js';
+import { TestServer, expectSuccessResponse } from '../test-utils/helpers.js';
 import { MockExternalService } from '../test-utils/mock-external-service.js';
 import { TEST_PORTS, TEST_URLS } from '../test-utils/constants.js';
 import { registerExternalFunction, triggerExternalCall } from '../test-utils/external-helpers.js';
@@ -51,4 +51,91 @@ describe('Real Bridge Smoke', () => {
       })
     );
   });
+
+  it('reports a syntax error in a Lua script', async () => {
+    const response = await request(app)
+      .post('/lua/execute')
+      .send({ script: 'local x = ; return x' })
+      .expect(500);
+
+    expect(response.body.success).toBe(false);
+  });
+
+    it('should correctly serialize object and array return values from raw Lua script', async () => {
+      // Test object return value
+      const objectScript = `
+        local player = {
+          id = 1,
+          name = "TestPlayer",
+          score = 100,
+          active = true
+        }
+        return player
+      `;
+      
+      const objectResponse = await request(app)
+        .post('/lua/execute')
+        .send({ script: objectScript })
+        .expect(200);
+      
+      expectSuccessResponse(objectResponse, (res) => {
+        expect(res.body.result).toEqual({ 
+          id: 1, 
+          name: 'TestPlayer', 
+          score: 100,
+          active: true
+        });
+      });
+      
+      // Test array return value
+      const arrayScript = `
+        local players = {"Player1", "Player2", "Player3"}
+        return players
+      `;
+      
+      const arrayResponse = await request(app)
+        .post('/lua/execute')
+        .send({ script: arrayScript })
+        .expect(200);
+      
+      expectSuccessResponse(arrayResponse, (res) => {
+        expect(res.body.result).toEqual(['Player1', 'Player2', 'Player3']);
+      });
+      
+      // Test nested structure
+      const nestedScript = `
+        local gameData = {
+          players = {
+            {id = 1, name = "Alice"},
+            {id = 2, name = "Bob"}
+          },
+          settings = {
+            difficulty = "hard",
+            maxPlayers = 4
+          },
+          scores = {100, 200, 150}
+        }
+        return gameData
+      `;
+      
+      const nestedResponse = await request(app)
+        .post('/lua/execute')
+        .send({ script: nestedScript })
+        .expect(200);
+      
+      expectSuccessResponse(nestedResponse, (res) => {
+        expect(res.body.result).toEqual({
+          players: [
+            {id: 1, name: 'Alice'},
+            {id: 2, name: 'Bob'}
+          ],
+          settings: {
+            difficulty: 'hard',
+            maxPlayers: 4
+          },
+          scores: [100, 200, 150]
+        });
+      });
+      
+    });
 });

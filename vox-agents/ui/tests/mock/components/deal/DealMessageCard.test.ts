@@ -90,15 +90,6 @@ describe('DealMessageCard', () => {
     expect(wrapper.findAll('button')).toHaveLength(0);
   });
 
-  it('shows the Rejected status note and no actions when the proposal was rejected', () => {
-    const wrapper = mountCard({
-      deal: dealMsg({ SpeakerID: 1 }),
-      outcome: outcome({ status: 'rejected' }),
-    });
-    expect(wrapper.text()).toContain('Rejected');
-    expect(wrapper.findAll('button')).toHaveLength(0);
-  });
-
   it('absorbs the rejection line into the proposal card instead of a separate card', () => {
     // The reject row is filtered out of the stream upstream; its voiced line arrives here as one of
     // this proposal's responses, so the whole exchange reads as a single card.

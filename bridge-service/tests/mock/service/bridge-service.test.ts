@@ -35,12 +35,15 @@ describe('Bridge Service Orchestration', () => {
     }
 
     expect(bridgeService.isServiceRunning()).toBe(true);
-    expect(bridgeService.getHealthStatus()).toEqual(
+    const healthStatus = bridgeService.getHealthStatus();
+    expect(healthStatus).toEqual(
       expect.objectContaining({
         success: true,
         dll_connected: true
       })
     );
+    expect(typeof healthStatus.uptime).toBe('number');
+    expect(healthStatus.uptime).toBeGreaterThanOrEqual(0);
 
     await bridgeService.shutdown();
 

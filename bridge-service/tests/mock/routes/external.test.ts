@@ -211,15 +211,18 @@ describe('External Routes', () => {
       mockExternalService.reset();
     });
 
-    it('should handle synchronous external function call', async () => {
-      const argument = 'test-sync-call-1';
-
+    // Sync- and async-registered functions share one call path, so keep both
+    // inputs as rows of one table instead of two near-identical tests.
+    it.each([
+      { mode: 'Synchronous', functionName: 'syncTestFunction', isAsync: false, argument: 'test-sync-call-1' },
+      { mode: 'Asynchronous', functionName: 'asyncTestFunction', isAsync: true, argument: 'test-async-call-1' }
+    ])('should handle $mode external function call', async ({ functionName, isAsync, argument, mode }) => {
       // Use helper function that works for both mock and real modes
       const response = await triggerExternalCall(
         app,
-        'syncTestFunction',
+        functionName,
         argument,
-        false // synchronous
+        isAsync
       );
       
       // Verify response structure
@@ -231,29 +234,7 @@ describe('External Routes', () => {
         expect(mockExternalService.getLastRequest().args).toEqual(argument);
       }
       
-      logSuccess('Synchronous external function call handled');
-    });
-
-    it('should handle asynchronous external function call', async () => {
-      const argument = 'test-async-call-1';
-      
-      // Use helper function that works for both mock and real modes
-      const response = await triggerExternalCall(
-        app,
-        'asyncTestFunction',
-        argument,
-        true // asynchronous
-      );
-      
-      // Verify response structure
-      verifyExternalResponse(response, argument);
-      
-      // Verify external service was called (only in mock mode)
-      if (USE_MOCK) {
-        expect(mockExternalService.getCallCount()).toBe(1);
-      }
-      
-      logSuccess('Asynchronous external function call handled');
+      logSuccess(`${mode} external function call handled`);
     });
 
     it('should handle external service failure', async () => {

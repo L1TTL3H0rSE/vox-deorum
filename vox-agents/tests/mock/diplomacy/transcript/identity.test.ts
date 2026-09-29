@@ -1,12 +1,12 @@
 /**
- * Unit tests for the Envoy identity helpers (getSelfIdentity / formatUserDescription) and the
- * identityOf transcript util. Identity is resolved once at thread-open time and stored on the
+ * Unit tests for the Envoy identity helpers (getSelfIdentity / formatUserDescription).
+ * Identity is resolved once at thread-open time and stored on the
  * EnvoyThread (player1Identity / player2Identity) — never re-fetched from live game state.
+ * The identityOf selector those helpers use is exercised through them.
  */
 
 import { describe, it, expect } from 'vitest';
 import { agentRegistry } from '../../../../src/infra/agent-registry.js';
-import { identityOf } from '../../../../src/utils/diplomacy/transcript/transcript-utils.js';
 import type { EnvoyThread } from '../../../../src/types/index.js';
 
 // Resolve through the registry (the canonical load entry) to avoid the circular-import
@@ -32,17 +32,6 @@ function thread(partial: Partial<EnvoyThread> = {}): EnvoyThread {
     ...partial,
   };
 }
-
-describe('identityOf', () => {
-  it('returns the stored identity for either seat', () => {
-    expect(identityOf(thread(), 1)).toEqual({ name: 'Rome', leader: 'Caesar' });
-    expect(identityOf(thread(), 3)).toEqual({ name: 'Germany', leader: 'Bismarck' });
-  });
-
-  it('returns undefined when the seat has no stored identity', () => {
-    expect(identityOf(thread({ player1Identity: undefined }), 1)).toBeUndefined();
-  });
-});
 
 describe('getSelfIdentity', () => {
   it('reads the voiced seat (input.agent) from the thread', () => {

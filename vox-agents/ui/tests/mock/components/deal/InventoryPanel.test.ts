@@ -52,20 +52,17 @@ describe('InventoryPanel', () => {
     expect(wrapper.emitted('add-term')).toBeUndefined();
   });
 
-  it('suppresses adds while locked (rows are aria-disabled, clicks do nothing)', async () => {
-    const wrapper = mountPanel(cats(), { locked: true });
-    const ob = row(wrapper, 'Open Borders')!;
-    expect(ob.attributes('aria-disabled')).toBe('true');
+  it.each(['locked', 'busy'])(
+    'suppresses adds while %s (rows are aria-disabled, clicks do nothing)',
+    async (state) => {
+      const wrapper = mountPanel(cats(), { [state]: true });
+      const ob = row(wrapper, 'Open Borders')!;
+      expect(ob.attributes('aria-disabled')).toBe('true');
 
-    await ob.trigger('click');
-    expect(wrapper.emitted('add-term')).toBeUndefined();
-  });
-
-  it('suppresses adds while a write is busy', async () => {
-    const wrapper = mountPanel(cats(), { busy: true });
-    await row(wrapper, 'Open Borders')!.trigger('click');
-    expect(wrapper.emitted('add-term')).toBeUndefined();
-  });
+      await ob.trigger('click');
+      expect(wrapper.emitted('add-term')).toBeUndefined();
+    },
+  );
 
   it('expands a targeted promise row and emits the already-targeted term when a target is chosen', async () => {
     const wrapper = mountPanel(

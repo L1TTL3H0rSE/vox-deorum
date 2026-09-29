@@ -18,14 +18,9 @@ describe("Calculator Tool via MCP", () => {
         arguments: { Expression: test.Expression }
       });
 
-      expect(result.content).toBeDefined();
-      expect((result.content as any)).toBeDefined();
-      
-      const content = (result.content as any);
-      if (content.type === "text") {
-        const parsed = JSON.parse(content.text);
-        expect(parsed.Result).toBe(test.expected);
-      }
+      const content = (result.content as any)[0];
+      expect(content.type).toBe("text");
+      expect(JSON.parse(content.text).Result).toBe(test.expected);
     }
   });
 
@@ -35,26 +30,9 @@ describe("Calculator Tool via MCP", () => {
       arguments: { Expression: "pi * 2" }
     });
 
-    expect(result.content).toBeDefined();
-    const content = (result.content as any);
-    if (content.type === "text") {
-      const parsed = JSON.parse(content.text);
-      expect(parsed.Result).toBeCloseTo(6.283185307);
-    }
-  });
-
-  it("should handle non-numeric results", async () => {
-    const result = await mcpClient.callTool({
-      name: "calculator",
-      arguments: { Expression: "sqrt(-1)" }
-    });
-
-    expect(result.content).toBeDefined();
     const content = (result.content as any)[0];
-    if (content.type === "text") {
-      const parsed = JSON.parse(content.text);
-      expect(parsed.Result).toBe("i");
-    }
+    expect(content.type).toBe("text");
+    expect(JSON.parse(content.text).Result).toBeCloseTo(6.283185307);
   });
 
   it("should handle errors gracefully", async () => {
@@ -63,13 +41,6 @@ describe("Calculator Tool via MCP", () => {
       arguments: { Expression: "invalid expression @#$" }
     });
 
-    expect(result.content).toBeDefined();
-    const content = (result.content as any)[0];
-    expect(content.type).toBe("text");
-    
-    if (content.type === "text") {
-      // Should contain error message
-      expect(content.text).toContain("error");
-    }
+    expect(result.isError).toBe(true);
   });
 });

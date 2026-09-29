@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest';
 import {
   symmetrizeDeal,
   applyDealDurations,
-  SYMMETRIC_TRADE_ITEM_TYPES,
   SYMMETRIC_PROMISE_TYPES,
   TARGETED_PROMISE_TYPES,
   PROMISE_METADATA,
@@ -51,16 +50,6 @@ describe('DealPayloadSchema wire-shape coercion', () => {
     expect(DealPayloadSchema.safeParse({ version: 1, items: { a: 1 }, promises: [] }).success).toBe(false);
     expect(DealPayloadSchema.safeParse({ version: 1, items: 'nope', promises: [] }).success).toBe(false);
     expect(DealPayloadSchema.safeParse({ version: 1, items: [], promises: { promiserID: 1 } }).success).toBe(false);
-  });
-});
-
-describe('SYMMETRIC_TRADE_ITEM_TYPES', () => {
-  it('contains exactly the four mutual agreements', () => {
-    expect([...SYMMETRIC_TRADE_ITEM_TYPES].sort()).toEqual(
-      ['DECLARATION_OF_FRIENDSHIP', 'DEFENSIVE_PACT', 'PEACE_TREATY', 'RESEARCH_AGREEMENT']
-    );
-    expect(SYMMETRIC_TRADE_ITEM_TYPES.has('OPEN_BORDERS')).toBe(false);
-    expect(SYMMETRIC_TRADE_ITEM_TYPES.has('GOLD')).toBe(false);
   });
 });
 

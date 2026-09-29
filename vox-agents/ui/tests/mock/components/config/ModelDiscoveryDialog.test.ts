@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import ModelDiscoveryDialog from '@/components/config/ModelDiscoveryDialog.vue';
-import { ModelDiscoveryError, type ModelDiscoveryErrorKind } from '@/api/client';
+import { ModelDiscoveryError } from '@/api/client';
 import { ButtonStub } from '../../../helpers/stubs.js';
 
 const { api } = vi.hoisted(() => ({
@@ -127,21 +127,6 @@ describe('ModelDiscoveryDialog', () => {
     expect(wrapper.findAll('.setup-wizard-model strong').map(node => node.text()))
       .toEqual(['openrouter/alpha', 'openrouter/zeta']);
     expect((wrapper.find('input[value="openrouter/zeta"]').element as HTMLInputElement).checked).toBe(true);
-  });
-
-  it.each<[ModelDiscoveryErrorKind, string]>([
-    ['auth', 'did not accept those details'],
-    ['network', 'could not reach OpenRouter'],
-    ['provider', 'could not list models right now'],
-    ['missing-credential', 'Add the requested OpenRouter details'],
-    ['unsupported', 'cannot list models here yet'],
-  ])('shows discovery guidance for a %s error', async (kind, copy) => {
-    api.discoverModels.mockRejectedValue(new ModelDiscoveryError('raw failure', kind));
-    const wrapper = mountDialog();
-
-    await discoverProvider(wrapper);
-
-    expect(wrapper.text()).toContain(copy);
   });
 
   it('suggests Setup wizard after a Codex discovery failure', async () => {

@@ -73,11 +73,8 @@ describe('oracle output helpers', () => {
     it('builds a stable base name with parsed integer turn', () => {
       const base = getTrailBase({ game_id: 'g1', player_id: '5', turn: '030' }, '');
       expect(base).toBe('g1-p5-t30');
-    });
-
-    it('appends the trail suffix to the base name', () => {
-      const base = getTrailBase({ game_id: 'g1', player_id: '5', turn: '30' }, '-ModelName');
-      expect(base).toBe('g1-p5-t30-ModelName');
+      // A non-empty suffix is appended to the base name.
+      expect(getTrailBase({ game_id: 'g1', player_id: '5', turn: '30' }, '-ModelName')).toBe('g1-p5-t30-ModelName');
     });
 
     it('derives json and md paths from the experiment dir and base', () => {

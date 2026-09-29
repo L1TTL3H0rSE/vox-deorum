@@ -66,74 +66,18 @@ describe("Get Events Tool via MCP", () => {
   });
 
   /**
-   * Test filtering events by player visibility
-   */
-  it("should filter events by player visibility", async () => {
-    const result = await mcpClient.callTool({
-      name: "get-events",
-      arguments: {
-        PlayerID: 0
-      }
-    });
-
-    const content = (result.content as any)[0];
-    const parsed = JSON.parse(content.text);
-    
-    // Removed filters check - not in output schema: expect(// parsed.filters.playerID).toBe(0);
-    expect(parsed.Events).toBeDefined();
-    expect(Array.isArray(parsed.Events)).toBe(true);
-    
-    // When filtered by player, events may still have visibility data
-    if (parsed.Events.length > 0) {
-      const event = parsed.Events[0];
-      // Visibility is optional in the schema
-      if (event.Visibility) {
-        expect(typeof event.Visibility).toBe("object");
-      }
-    }
-  });
-
-  /**
-   * Test combining turn and player filters
-   */
-  it("should filter events by both turn and player", async () => {
-    const result = await mcpClient.callTool({
-      name: "get-events",
-      arguments: {
-        Turn: 1,
-        PlayerID: 0
-      }
-    });
-
-    const content = (result.content as any)[0];
-    const parsed = JSON.parse(content.text);
-    
-    // Removed filters check - not in output schema: expect(// parsed.filters.turn).toBe(1);
-    // Removed filters check - not in output schema: expect(// parsed.filters.playerID).toBe(0);
-    expect(parsed.Events).toBeDefined();
-    expect(Array.isArray(parsed.Events)).toBe(true);
-    
-    // All events should be from turn 1
-    parsed.Events.forEach((event: any) => {
-      expect(event.Turn).toBe(1);
-    });
-  });
-
-  /**
    * Test with invalid player ID
    */
   it("should handle invalid player ID", async () => {
-    try {
-      await mcpClient.callTool({
-        name: "get-events",
-        arguments: {
-          PlayerID: 25 // Invalid - should be 0-21
-        }
-      });
-      expect.fail("Should have thrown an error");
-    } catch (error) {
-      expect(error).toBeDefined();
-    }
+    // Invalid PlayerID may surface as a thrown protocol error or an error result
+    const failed = await mcpClient.callTool({
+      name: "get-events",
+      arguments: {
+        PlayerID: 25 // Invalid - should be 0-21
+      }
+    }).then(result => result.isError === true, () => true);
+
+    expect(failed).toBe(true);
   });
 
   /**

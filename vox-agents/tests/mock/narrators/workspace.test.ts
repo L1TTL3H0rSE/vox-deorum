@@ -86,19 +86,13 @@ describe('NarratorWorkspace', () => {
   });
 
   describe('context management', () => {
-    it('should round-trip a context through writeContext/getContext', () => {
-      const ctx = makeContext();
-      ws.writeContext(ctx);
-      expect(ws.getContext()).toEqual(ctx);
-    });
-
-    it('should write the context to narrator-context.json on disk', () => {
+    it('should write the context to narrator-context.json and read it back', () => {
       const ctx = makeContext();
       ws.writeContext(ctx);
       const filePath = path.join(workspaceDir, CONTEXT_FILE);
       expect(fs.existsSync(filePath)).toBe(true);
-      const onDisk = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      expect(onDisk).toEqual(ctx);
+      expect(JSON.parse(fs.readFileSync(filePath, 'utf-8'))).toEqual(ctx);
+      expect(ws.getContext()).toEqual(ctx);
     });
 
     it('should throw a helpful error when reading a missing context', () => {
@@ -112,19 +106,13 @@ describe('NarratorWorkspace', () => {
       expect(ws.readEpisodes()).toBeNull();
     });
 
-    it('should round-trip episodes through writeEpisodes/readEpisodes', () => {
-      const episodes = makeEpisodes();
-      ws.writeEpisodes(episodes);
-      expect(ws.readEpisodes()).toEqual(episodes);
-    });
-
-    it('should write episodes to episodes.json on disk', () => {
+    it('should write episodes to episodes.json and read them back', () => {
       const episodes = makeEpisodes();
       ws.writeEpisodes(episodes);
       const filePath = path.join(workspaceDir, EPISODES_FILE);
       expect(fs.existsSync(filePath)).toBe(true);
-      const onDisk = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      expect(onDisk).toEqual(episodes);
+      expect(JSON.parse(fs.readFileSync(filePath, 'utf-8'))).toEqual(episodes);
+      expect(ws.readEpisodes()).toEqual(episodes);
     });
 
     it('should round-trip an empty episodes manifest', () => {

@@ -4,13 +4,12 @@
  * sanitization, participant validation, and the Success/Result passthrough.
  *
  * Stage 7.04 widened the recipient to the full addressable player range so a human watching from
- * an observer slot can be notified. The delivery-side half of that — the pinned-observer redirect —
+ * an observer slot can be notified. The delivery-side half of that (the pinned-observer redirect)
  * lives in `lua/post-notification.lua` and needs live game state, which this tier cannot execute
- * (the repo has no Lua harness), so the last suite pins the script's guard structurally instead.
+ * (the repo has no Lua harness), so it is not exercised here.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { LuaFunction } from '../../../src/bridge/lua-function.js';
 import createPostNotificationTool from '../../../src/tools/actions/post-notification.js';
 import { MaxMajorCivs, MaxPlayers } from '../../../src/knowledge/schema/base.js';
@@ -175,40 +174,5 @@ describe('post-notification observer-capable recipient', () => {
     expect(() => tool.inputSchema.parse({
       PlayerID: 0, CounterpartID: MaxMajorCivs, Summary: 's', Message: 'm',
     })).toThrow();
-  });
-});
-
-describe('post-notification pinned-observer redirect (Lua guard)', () => {
-  // CvNotifications::Add only DISPLAYS a notification whose recipient is the active player, so a
-  // human strategist (an observer pinned to a civ seat) would never see one addressed to that
-  // seat. The script redirects it to the observer — but only under all three guard conditions, so
-  // a pure observer keeps its own slot and normal seated play is untouched. There is no Lua test
-  // harness in this repo, so this asserts the guard's shape rather than running it.
-  const script = readFileSync('lua/post-notification.lua', 'utf-8');
-
-  it('redirects only when the active player is an observer whose UI override is the requested seat', () => {
-    // All three conditions, and the redirect they gate, are present.
-    expect(script).toMatch(/activeID\s*~=\s*targetID/);
-    expect(script).toMatch(/IsObserver\(\)/);
-    expect(script).toMatch(/GetObserverUIOverridePlayer\(\)/);
-    expect(script).toMatch(/overrideID\s*==\s*targetID/);
-    expect(script).toMatch(/targetID\s*=\s*activeID/);
-  });
-
-  it('defaults to the requested recipient and nil-guards every lookup so odd state falls through', () => {
-    // targetID starts as the requested playerID: any guard that does not hold leaves it there,
-    // which is exactly the normal-play and pure-observer behaviour.
-    expect(script).toMatch(/local\s+targetID\s*=\s*playerID/);
-    expect(script).toMatch(/local\s+player\s*=\s*Players\[targetID\]/);
-    // Each game lookup is pcall'd and nil-checked, so a stock DLL without these bindings degrades
-    // to the requested recipient instead of erroring the whole notification. The two numeric reads
-    // share one pcall-guarded reader; IsObserver is guarded at its own call site.
-    expect(script).toMatch(/local function readNumber\(fn\)\s*\n\s*local ok, value = pcall\(fn\)/);
-    expect(script).toMatch(/readNumber\(function\(\) return Game\.GetActivePlayer\(\) end\)/);
-    expect(script).toMatch(/readNumber\(function\(\) return Game\.GetObserverUIOverridePlayer\(\) end\)/);
-    expect(script).toMatch(/pcall\(function\(\) return activePlayer:IsObserver\(\) end\)/);
-    expect(script).toMatch(/activeID\s*~=\s*nil/);
-    expect(script).toMatch(/activePlayer\s*~=\s*nil/);
-    expect(script).toMatch(/overrideID\s*~=\s*nil/);
   });
 });

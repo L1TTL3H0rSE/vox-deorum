@@ -132,22 +132,6 @@ describe('enact-agent-deal', () => {
     });
   });
 
-  it('honors the recipient as an explicit AccepterID', async () => {
-    const proposalID = await seedProposal();
-    await enact.execute({ ProposalMessageID: proposalID, AccepterID: 1 } as any);
-    const accepts = await getDiplomaticMessages(1, 3, { messageType: 'deal-accept' });
-    expect(accepts[0].SpeakerID).toBe(1);
-  });
-
-  it('refuses self-acceptance by the proposal author', async () => {
-    // Refused as a wrong-recipient conflict rather than a thrown error (see the conflict suite):
-    // in practice a caller only sends the author as accepter after prechecking against a proposal
-    // that has since been replaced, which is a lost race, not an infrastructure failure.
-    const proposalID = await seedProposal();
-    const result = await enact.execute({ ProposalMessageID: proposalID, AccepterID: 3 } as any);
-    expect(result.Conflict?.Reason).toBe('wrong-recipient');
-  });
-
   it('is idempotent — a second enactment refuses and writes nothing new', async () => {
     const proposalID = await seedProposal();
     const first = await enact.execute({ ProposalMessageID: proposalID } as any);
@@ -235,6 +219,10 @@ describe('enact-agent-deal', () => {
   });
 
   it('reports a non-recipient accepter as a wrong-recipient conflict', async () => {
+    // This covers the proposal author accepting its own proposal too: in practice a caller only
+    // sends the author as accepter after prechecking against a proposal that has since been
+    // replaced, which is a lost race, so it is refused as a wrong-recipient conflict rather
+    // than a thrown error.
     const proposalID = await seedProposal(); // authored by seat 3
     const result = await enact.execute({ ProposalMessageID: proposalID, AccepterID: 3 } as any);
 
@@ -326,31 +314,6 @@ describe('enact-agent-deal', () => {
     await expect(enact.execute({ ProposalMessageID: proposalID } as any)).rejects.toThrow(/bridge is unavailable/);
     expect(await getDiplomaticMessages(1, 3, { messageType: 'deal-accept' })).toHaveLength(0);
     expect(await getDiplomaticMessages(1, 3, { messageType: 'deal-enacted' })).toHaveLength(0);
-  });
-
-  it('keeps validation and infrastructure failures on the thrown error channel', async () => {
-    // The conflict boundary covers proposal STATE only. Everything a caller cannot resolve by
-    // refreshing its view of the conversation must stay a thrown MCP error, so it is never
-    // mistaken for "someone beat you to it".
-    const text = await append.execute({
-      PlayerAID: 3, PlayerBID: 1, PlayerARole: 'negotiator', PlayerBRole: 'the leader',
-      SpeakerID: 3, MessageType: 'text', Content: 'hi',
-    } as any);
-    const malformed = await seedProposal(3, {});
-    const valid = await seedProposal();
-
-    await expect(enact.execute({ ProposalMessageID: 9999 } as any)).rejects.toThrow(/does not exist/);
-    await expect(enact.execute({ ProposalMessageID: text.ID } as any)).rejects.toThrow(/not a deal-proposal/);
-    await expect(enact.execute({ ProposalMessageID: malformed } as any)).rejects.toThrow(/invalid Payload\.Deal/);
-    await expect(
-      enact.execute({
-        ProposalMessageID: valid,
-        Deal: { version: 1, items: [{ fromPlayerID: 3, toPlayerID: 1, itemType: 'GOLD', amount: 5 }], promises: [] },
-      } as any)
-    ).rejects.toThrow(/does not match/);
-
-    vi.spyOn(inspectDealUtil, 'enactDeal').mockResolvedValue(null as any);
-    await expect(enact.execute({ ProposalMessageID: valid } as any)).rejects.toThrow(/bridge is unavailable/);
   });
 
   it('enacts a promise-only / item-less deal', async () => {

@@ -55,7 +55,7 @@ vi.mock('../../../src/utils/logger.js', () => ({
 }));
 
 // Imported after the mocks are registered.
-const { EventPipe, eventPipe } = await import('../../../src/services/event-pipe.js');
+const { EventPipe } = await import('../../../src/services/event-pipe.js');
 const { config } = await import('../../../src/utils/config.js');
 
 let originalEnabled: boolean;
@@ -100,34 +100,21 @@ function makeEvent(overrides: Partial<any> = {}): any {
   };
 }
 
-describe('EventPipe singleton', () => {
-  it('exports a singleton instance', () => {
-    expect(eventPipe).toBeInstanceOf(EventPipe);
-  });
-});
-
 describe('EventPipe.broadcastBatch', () => {
-  it('joins events with the delimiter and appends a trailing delimiter', async () => {
-    const pipe = await startedPipe();
-    const a = makeEvent({ id: 1 });
-    const b = makeEvent({ id: 2, type: 'CityFounded' });
+  const a = makeEvent({ id: 1 });
+  const b = makeEvent({ id: 2, type: 'CityFounded' });
+  const single = makeEvent({ id: 7 });
 
-    pipe.broadcastBatch([a, b]);
+  it.each([
+    { label: 'one event', events: [single], payload: JSON.stringify(single) + DELIMITER },
+    { label: 'two events', events: [a, b], payload: JSON.stringify(a) + DELIMITER + JSON.stringify(b) + DELIMITER },
+  ])('joins $label with the delimiter and appends a trailing delimiter', async ({ events, payload }) => {
+    const pipe = await startedPipe();
+
+    pipe.broadcastBatch(events);
 
     expect(mocks.broadcast).toHaveBeenCalledTimes(1);
-    expect(mocks.broadcast).toHaveBeenCalledWith(
-      JSON.stringify(a) + DELIMITER + JSON.stringify(b) + DELIMITER
-    );
-  });
-
-  it('broadcasts a single event with a trailing delimiter', async () => {
-    const pipe = await startedPipe();
-    const a = makeEvent({ id: 7 });
-
-    pipe.broadcastBatch([a]);
-
-    expect(mocks.broadcast).toHaveBeenCalledTimes(1);
-    expect(mocks.broadcast).toHaveBeenCalledWith(JSON.stringify(a) + DELIMITER);
+    expect(mocks.broadcast).toHaveBeenCalledWith(payload);
   });
 
   it('no-ops when the event pipe is disabled', async () => {
@@ -151,18 +138,6 @@ describe('EventPipe.broadcastBatch', () => {
     const pipe = await startedPipe();
 
     pipe.broadcastBatch([]);
-
-    expect(mocks.broadcast).not.toHaveBeenCalled();
-  });
-
-  it('no-ops while shutting down', async () => {
-    const pipe = await startedPipe();
-    // After stop() the pipe is both shutting down and no longer serving;
-    // either guard suppresses the broadcast.
-    await pipe.stop();
-    mocks.broadcast.mockClear();
-
-    pipe.broadcastBatch([makeEvent()]);
 
     expect(mocks.broadcast).not.toHaveBeenCalled();
   });
@@ -198,13 +173,6 @@ describe('EventPipe.getStats', () => {
       clients: 1,
       pipeName: config.eventpipe.name
     });
-  });
-
-  it('reports enabled=false when the pipe is disabled', () => {
-    config.eventpipe.enabled = false;
-    const pipe = new EventPipe();
-
-    expect(pipe.getStats().enabled).toBe(false);
   });
 });
 

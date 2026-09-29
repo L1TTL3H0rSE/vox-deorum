@@ -322,14 +322,8 @@ describe('text-cleaning', () => {
   });
 
   describe('buildRescuePrompt', () => {
-    it('uses the tool-mandating branch for "required"', () => {
-      const out = buildRescuePrompt('required');
-      expect(out).toMatch(/MUST call/);
-    });
-
-    it('uses the tool-mandating branch for "tool"', () => {
-      const out = buildRescuePrompt('tool');
-      expect(out).toMatch(/MUST call/);
+    it.each(['required', 'tool'])('uses the tool-mandating branch for "%s"', (toolChoice) => {
+      expect(buildRescuePrompt(toolChoice)).toMatch(/MUST call/);
     });
 
     it('uses the flexible branch for other toolChoice values', () => {
