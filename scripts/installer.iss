@@ -377,12 +377,12 @@ begin
 
         // Copy DLL to Community Patch folder
         CopyFile(ExpandConstant('{app}\scripts\release\CvGameCore_Expansion2.dll'),
-                ModsPath + '\(1) Community Patch\CvGameCore_Expansion2.dll', True);
+                ModsPath + '\(1) Community Patch\CvGameCore_Expansion2.dll', False);
 
         // Copy debug symbols if present
         if FileExists(ExpandConstant('{app}\scripts\release\CvGameCore_Expansion2.pdb')) then
           CopyFile(ExpandConstant('{app}\scripts\release\CvGameCore_Expansion2.pdb'),
-                  ModsPath + '\(1) Community Patch\CvGameCore_Expansion2.pdb', True);
+                  ModsPath + '\(1) Community Patch\CvGameCore_Expansion2.pdb', False);
 
         // Delete existing Vox Populi mod folders first
         DelTree(ModsPath + '\(2) Vox Populi', True, True, True);
@@ -419,15 +419,16 @@ begin
       // Delete cached localization database to force regeneration
       DeleteFile(GameSettingsPath + '\cache\Localization-Merged.db');
 
-      // Always copy Lua DLL - it's required for Vox Deorum
+      // Always copy Lua DLL - it's required for Vox Deorum. Overwrite (FailIfExists = False)
+      // because Civ V ships its own lua51_win32.dll, which would otherwise be kept.
       if FileExists(ExpandConstant('{app}\scripts\release\lua51_win32.dll')) then
       begin
         CopyFile(ExpandConstant('{app}\scripts\release\lua51_win32.dll'),
-                 Civ5Path + '\lua51_win32.dll', True);
+                 Civ5Path + '\lua51_win32.dll', False);
         // Also copy debug symbols if present
         if FileExists(ExpandConstant('{app}\scripts\release\lua51_win32.pdb')) then
           CopyFile(ExpandConstant('{app}\scripts\release\lua51_win32.pdb'),
-                   Civ5Path + '\lua51_win32.pdb', True);
+                   Civ5Path + '\lua51_win32.pdb', False);
       end;
     end;
   end;
