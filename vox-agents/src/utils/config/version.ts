@@ -23,7 +23,8 @@ const logger = createLogger('Config');
 export function loadVersionInfo(): VersionInfo | undefined {
   try {
     // Load version.json from project root
-    const versionPath = path.join(process.cwd(), '..', 'version.json');
+    const projectRoot = path.resolve(process.cwd(), '..');
+    const versionPath = path.join(projectRoot, 'version.json');
     if (!fs.existsSync(versionPath)) {
       logger.warn('version.json not found');
       return undefined;
@@ -32,16 +33,18 @@ export function loadVersionInfo(): VersionInfo | undefined {
     const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
     const { major = 0, minor = 0, revision = 0 } = versionData;
 
-    // Try to get git commit hash
+    // Installed builds have no Git metadata; worktrees use a .git file.
     let commit: string | undefined;
-    try {
-      commit = execSync('git rev-parse --short HEAD', {
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        cwd: path.join(process.cwd(), '..')
-      }).trim();
-    } catch {
-      // Git is optional; installed builds can use the version number alone.
+    if (fs.existsSync(path.join(projectRoot, '.git'))) {
+      try {
+        commit = execSync('git rev-parse --short HEAD', {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          cwd: projectRoot
+        }).trim();
+      } catch {
+        // Git is optional; installed builds can use the version number alone.
+      }
     }
 
     // Build version string
