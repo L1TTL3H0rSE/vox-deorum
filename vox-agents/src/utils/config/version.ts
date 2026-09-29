@@ -2,7 +2,7 @@
  * @module utils/config/version
  *
  * Resolve the running build's version triple from `version.json` plus
- * the current short git commit hash. Used at startup for logs and as
+ * the current short git commit hash when available. Used at startup for logs and as
  * the MCP client identifier.
  */
 
@@ -37,10 +37,11 @@ export function loadVersionInfo(): VersionInfo | undefined {
     try {
       commit = execSync('git rev-parse --short HEAD', {
         encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
         cwd: path.join(process.cwd(), '..')
       }).trim();
-    } catch (error) {
-      logger.debug('Failed to get git commit hash:', error);
+    } catch {
+      // Git is optional; installed builds can use the version number alone.
     }
 
     // Build version string

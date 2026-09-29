@@ -36,6 +36,8 @@ The hierarchy follows a few conventions worth knowing before writing queries. Th
 
 Logging is Winston throughout (`src/utils/logger.ts`; `console.log` is banned in production code). Each module creates a named logger. Output goes to a color-coded console, to `logs/error.log` and `logs/combined.log`, and, when the web server is up, to every connected dashboard via the SSE log stream, where the Logs view filters by source and level in real time.
 
+Startup version information comes from `version.json`. `src/utils/config/version.ts` adds the Git commit hash when available and silently skips it when Git is missing or the lookup fails.
+
 ## Inspecting agent behavior
 
 The usual workflow when an agent does something puzzling:
