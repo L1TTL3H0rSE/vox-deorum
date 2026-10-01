@@ -34,7 +34,7 @@ A **UnitAI role** (`UnitAITypes`) is the job a unit performs, such as attack, de
 | Homeland role passes | Recruits civilian units by live role. [Civilian operation](civilian-operation.md) lists the passes. |
 | Demand and force sizing | Counts roles such as explorers and settlers. |
 
-`CvEconomicAI::DoReconState` promotes suitable explorers and demotes surplus ones. Its target scales with the frontier, `FLAVOR_RECON`, and war state. Native explorers are preferred, and hysteresis limits rapid role changes. Homeland can assign a city-founding unit the settler role for opportunistic settlement. Leaving an army restores the XML default role, rather than the role held before recruitment. An [upgrade](upgrade.md) creates a replacement with its target type's default role.
+`CvEconomicAI::DoReconState` promotes suitable explorers and demotes surplus ones. Its target scales with the frontier, `FLAVOR_RECON`, and war state. Native explorers are preferred, and hysteresis limits rapid role changes. It runs once per turn, just after the player's danger refresh and before any tactical work, and it moves at most one unit each way. Because tactical recruitment excludes explorers, a promotion made here removes an ordinary combat unit from the tactical pool for the rest of that turn, so the recon flavors reach tactical behaviour and not only unit production. Homeland can assign a city-founding unit the settler role for opportunistic settlement. Leaving an army restores the XML default role, rather than the role held before recruitment. An [upgrade](upgrade.md) creates a replacement with its target type's default role.
 
 ## Supply
 

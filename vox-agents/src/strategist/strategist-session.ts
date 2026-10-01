@@ -109,6 +109,7 @@ export class StrategistSession extends VoxSession<StrategistSessionConfig> {
     this.seatingClaim = seatingClaim ?? undefined;
 
     voxCivilization.onGameExit(this.handleGameExit.bind(this));
+    voxCivilization.onGameBound(this.handleGameBound.bind(this));
   }
 
   /**
@@ -178,9 +179,14 @@ export class StrategistSession extends VoxSession<StrategistSessionConfig> {
         await voxCivilization.updateSkipAnimations(false);
       }
 
-      // Initialize OBS for recording/livestreaming (before game launch so scenes are ready)
+      // Launch the DirectX 11 build unless the user turned it off.
+      voxCivilization.setUseDX11(config.useDX11 !== false);
+
+      // Initialize OBS for recording/livestreaming (before game launch so scenes
+      // are ready). The executable is a first guess; handleGameBound corrects it
+      // once a real process is bound.
       const obsReady = await this.obsCall('initialize',
-        () => obsManager.initialize(this.config.production!, config.obs)
+        () => obsManager.initialize(this.config.production!, config.obs, voxCivilization.getGameExecutable())
       );
       if (obsReady) {
         this.production = new ProductionController(obsManager, this.config.production!);
@@ -986,6 +992,18 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
       };
     }
     return result;
+  }
+
+  /**
+   * Points OBS at every game process VoxCivilization binds: the first launch,
+   * an attached game, or a crash-recovery relaunch. The bound image name is
+   * the real build, whatever the DX11 setting asked for.
+   *
+   * @private
+   * @param imageName - Image name the bound process runs under
+   */
+  private handleGameBound(imageName: string): void {
+    void this.obsCall('retargetGame', () => obsManager.retargetGame(imageName));
   }
 
   /**

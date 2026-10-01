@@ -47,5 +47,6 @@ export const defaultConfig: VoxAgentsConfig = {
   telemetryDir: '',
   obs: {
     wsPort: 4455
-  }
+  },
+  useDX11: true
 };

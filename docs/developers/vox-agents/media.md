@@ -24,7 +24,7 @@ Helper predicates in `src/types/config.ts` split these into "visual" modes (play
 
 On initialization it makes sure OBS is running (launching it if needed), connects, and builds its scenes programmatically:
 
-- a game scene with a window capture of CivilizationV.exe and an application-audio capture of the same process. Desktop and microphone audio are muted for the session, so only game audio lands in the recording;
+- a game scene with a window capture of the Civilization V executable and an application-audio capture of the same process. Both inputs are retargeted on every setup, and again whenever a game process is bound (first launch, an attached game, or a crash-recovery relaunch), so the capture follows the build that is actually running rather than the one the DX11 setting asked for. A change made while OBS is disconnected is applied when it reconnects. Desktop and microphone audio are muted for the session, so only game audio lands in the recording;
 - for livestreams, a pause scene showing a static image.
 
 Production then follows a simple lifecycle: start, pause, resume, stop. Pausing means different things by mode: recordings pause the file so there is no dead air, while livestreams switch to the pause scene.

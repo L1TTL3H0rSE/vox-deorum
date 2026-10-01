@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 :: Launch Civilization V with Vox Deorum automation
-:: Usage: launch-civ5.cmd [lua_script_name]
-:: Example: launch-civ5.cmd StartGame.lua
-:: Default: StartGame.lua
+:: Usage: launch-civ5.cmd [lua_script_name] [production|standard] [executable_name]
+:: Example: launch-civ5.cmd StartGame.lua standard CivilizationV_DX11.exe
+:: Defaults: LoadMods.lua, standard, CivilizationV_DX11.exe
 
 :: Set default Lua script name if not provided
 set "LUA_SCRIPT=%~1"
@@ -51,7 +51,17 @@ if not exist "!CIV5_PATH!\CivilizationV.exe" (
 
 echo Found Civ 5 at: !CIV5_PATH!
 
-:: Ensure steam_appid.txt exists so CivilizationV.exe launches directly instead of
+:: Pick the game binary. The caller asks for the DirectX 11 build by default;
+:: installs without it fall back to the always-present default binary.
+set "CIV5_EXE=%~3"
+if "!CIV5_EXE!"=="" set "CIV5_EXE=CivilizationV_DX11.exe"
+if not exist "!CIV5_PATH!\!CIV5_EXE!" (
+    echo !CIV5_EXE! not found in the install, falling back to CivilizationV.exe
+    set "CIV5_EXE=CivilizationV.exe"
+)
+echo Using executable: !CIV5_EXE!
+
+:: Ensure steam_appid.txt exists so the game launches directly instead of
 :: being re-parented through Steam, which drops our environment (notably
 :: VOX_RL_CAPTURE) from the game process. Creation failures are ignored.
 if not exist "!CIV5_PATH!\steam_appid.txt" (
@@ -89,7 +99,7 @@ if /i "!PRODUCTION_MODE!"=="production" (
     echo Non-production mode (marker file removed)
 )
 
-echo Launching Civilization V with automation script: !LUA_SCRIPT!
+echo Launching !CIV5_EXE! with automation script: !LUA_SCRIPT!
 echo Working directory: !CIV5_PATH!
 cd /d "!CIV5_PATH!"
-"!CIV5_PATH!\CivilizationV.exe" "-Automation !LUA_SCRIPT!"
+"!CIV5_PATH!\!CIV5_EXE!" "-Automation !LUA_SCRIPT!"

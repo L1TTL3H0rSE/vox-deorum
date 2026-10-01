@@ -11,30 +11,35 @@ import { setTimeout } from 'node:timers/promises';
 
 const execAsync = promisify(exec);
 
+// Either build can be the running one: Vox Deorum prefers the DirectX 11
+// binary and the launch script falls back to the default one without it.
+const civImageNames = ['CivilizationV_DX11.exe', 'CivilizationV.exe'];
+
 /**
- * Guard: abort game tests if CivilizationV.exe is already running.
+ * Guard: abort game tests if Civilization V is already running.
  * Only one Civ5 instance can run at a time. If one is already active, it may be
- * a live game session — we must not kill it, so we skip game tests instead.
+ * a live game session, so we must not kill it and skip game tests instead.
  */
 function assertNoCivilizationRunning(): void {
   if (process.platform !== 'win32') return;
-  try {
-    const output = execSync(
-      'tasklist /FI "IMAGENAME eq CivilizationV.exe" /FO CSV',
-      { encoding: 'utf-8' }
-    );
-    if (output.includes('CivilizationV.exe')) {
+  for (const imageName of civImageNames) {
+    let output: string;
+    try {
+      output = execSync(
+        `tasklist /FI "IMAGENAME eq ${imageName}" /FO CSV`,
+        { encoding: 'utf-8' }
+      );
+    } catch {
+      // tasklist command failed, safe to continue
+      continue;
+    }
+    if (output.includes(imageName)) {
       throw new Error(
-        'CivilizationV.exe is already running. ' +
+        `${imageName} is already running. ` +
         'Only one instance can run at a time. ' +
         'Please close Civilization V before running game tests.'
       );
     }
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('CivilizationV.exe is already running')) {
-      throw e;
-    }
-    // tasklist command failed — safe to continue
   }
 }
 
@@ -42,28 +47,33 @@ function assertNoCivilizationRunning(): void {
  * Kill any existing Civilization V processes
  */
 async function killAllCivilizationProcesses(): Promise<void> {
-  try {
-    console.log('Attempting to kill any existing CivilizationV.exe processes...');
-    await execAsync('taskkill /F /IM CivilizationV.exe');
-    console.log('Successfully killed existing processes');
-  } catch (error) {
-    // Process might not exist, which is fine
-    console.log('No existing CivilizationV.exe process found (or failed to kill)');
+  for (const imageName of civImageNames) {
+    try {
+      console.log(`Attempting to kill any existing ${imageName} processes...`);
+      await execAsync(`taskkill /F /IM ${imageName}`);
+      console.log('Successfully killed existing processes');
+    } catch (error) {
+      // Process might not exist, which is fine
+      console.log(`No existing ${imageName} process found (or failed to kill)`);
+    }
   }
   // Wait a bit for process to fully terminate
   await setTimeout(3000);
 }
 
 /**
- * Check if Civilization V is running
+ * Check if Civilization V is running under either build's image name
  */
 async function isCivilizationRunning(): Promise<boolean> {
-  try {
-    const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq CivilizationV.exe" /FO CSV');
-    return stdout.includes('CivilizationV.exe');
-  } catch {
-    return false;
+  for (const imageName of civImageNames) {
+    try {
+      const { stdout } = await execAsync(`tasklist /FI "IMAGENAME eq ${imageName}" /FO CSV`);
+      if (stdout.includes(imageName)) return true;
+    } catch {
+      // tasklist command failed for this name, try the next
+    }
   }
+  return false;
 }
 
 // Explicit gate: the live/game tier only runs under `npm run test:game`, which sets

@@ -24,6 +24,7 @@ import path from 'path';
 import { createLogger } from '../utils/logger.js';
 import { processManager } from './process-manager.js';
 import type { ProductionMode, ObsConfig } from '../types/config.js';
+import { civ5ExecutableDefault } from '../utils/game/civ5-executable.js';
 
 const logger = createLogger('ObsManager');
 
@@ -33,7 +34,7 @@ const GAME_CAPTURE_INPUT_NAME = 'Game Capture';
 const PAUSE_IMAGE_INPUT_NAME = 'Pause Image';
 const GAME_AUDIO_INPUT_NAME = 'Game Audio';
 const GAME_AUDIO_INPUT_KIND = 'wasapi_process_output_capture';
-const GAME_EXECUTABLE = 'CivilizationV.exe';
+const DEFAULT_GAME_EXECUTABLE = civ5ExecutableDefault;
 const DEFAULT_OBS_PATH = 'C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe';
 const HEALTH_POLL_INTERVAL = 10_000;
 const MAX_BACKOFF_INTERVAL = 60_000;
@@ -42,6 +43,8 @@ class ObsManager {
   private obs = new OBSWebSocket();
   private mode: ProductionMode = 'none';
   private obsConfig?: ObsConfig;
+  /** Image name the capture inputs target; set per session from the launch setting. */
+  private gameExecutable = DEFAULT_GAME_EXECUTABLE;
   private connected = false;
   private productionActive = false;
   private healthTimer?: ReturnType<typeof globalThis.setTimeout>;
@@ -60,8 +63,10 @@ class ObsManager {
   /**
    * Initialize OBS connection and set up scenes.
    * Returns true if OBS is operational, false if it could not connect.
+   *
+   * @param gameExecutable - Image name the capture inputs should target
    */
-  async initialize(mode: ProductionMode, config?: ObsConfig): Promise<boolean> {
+  async initialize(mode: ProductionMode, config?: ObsConfig, gameExecutable?: string): Promise<boolean> {
     if (mode !== 'livestream' && mode !== 'recording') {
       logger.debug(`OBS not needed for mode: ${mode}`);
       return false;
@@ -69,6 +74,7 @@ class ObsManager {
 
     this.mode = mode;
     this.obsConfig = config;
+    this.gameExecutable = gameExecutable ?? DEFAULT_GAME_EXECUTABLE;
 
     // Register with ProcessManager for clean shutdown
     if (!this.processManagerRegistered) {
@@ -368,10 +374,50 @@ class ObsManager {
   }
 
   /**
+   * Point the capture inputs at the process that is actually running.
+   * The bound process can differ from the setting (launcher fallback, or an
+   * attached game started with the other build). The target is remembered
+   * even while disconnected, so a reconnect rebuilds the scenes against it.
+   */
+  async retargetGame(gameExecutable: string): Promise<void> {
+    if (this.gameExecutable === gameExecutable) return;
+    this.gameExecutable = gameExecutable;
+    if (!this.connected) return;
+    const windowTarget = `${gameExecutable}:${gameExecutable}:${gameExecutable}`;
+    await this.retargetCaptureInput(GAME_CAPTURE_INPUT_NAME, {
+      capture_mode: 'window',
+      window: windowTarget,
+      priority: 2,
+    });
+    await this.retargetCaptureInput(GAME_AUDIO_INPUT_NAME, {
+      window: windowTarget,
+      priority: 2,
+    });
+  }
+
+  /**
+   * Point an existing capture input at the current game executable.
+   * A missing input is not an error: the scene may predate it.
+   */
+  private async retargetCaptureInput(
+    inputName: string,
+    inputSettings: { capture_mode?: string; window: string; priority: number }
+  ): Promise<void> {
+    try {
+      await this.obs.call('SetInputSettings', { inputName, inputSettings, overlay: true });
+      logger.debug(`Retargeted ${inputName} to ${this.gameExecutable}`);
+    } catch (error) {
+      logger.warn(`Failed to retarget ${inputName} to ${this.gameExecutable}:`, error);
+    }
+  }
+
+  /**
    * Set up OBS scenes for game capture and pause screen.
    * Creates scenes and inputs if they don't already exist.
    */
   private async setupScenes(): Promise<void> {
+    const gameExecutable = this.gameExecutable;
+    const windowTarget = `${gameExecutable}:${gameExecutable}:${gameExecutable}`;
     try {
       const { scenes } = await this.obs.call('GetSceneList');
       const sceneNames = scenes.map((s: any) => s.sceneName as string);
@@ -388,11 +434,11 @@ class ObsManager {
           inputKind: 'game_capture',
           inputSettings: {
             capture_mode: 'window',
-            window: `${GAME_EXECUTABLE}:${GAME_EXECUTABLE}:${GAME_EXECUTABLE}`,
-            priority: 2, // WINDOW_PRIORITY_EXE — match by executable name
+            window: windowTarget,
+            priority: 2, // WINDOW_PRIORITY_EXE: match by executable name
           },
         });
-        logger.info(`Created game capture input targeting ${GAME_EXECUTABLE}`);
+        logger.info(`Created game capture input targeting ${gameExecutable}`);
       }
 
       // Ensure application audio capture exists in the game scene (idempotent)
@@ -409,15 +455,27 @@ class ObsManager {
             inputName: GAME_AUDIO_INPUT_NAME,
             inputKind: GAME_AUDIO_INPUT_KIND,
             inputSettings: {
-              window: `${GAME_EXECUTABLE}:${GAME_EXECUTABLE}:${GAME_EXECUTABLE}`,
+              window: windowTarget,
               priority: 2,
             },
           });
-          logger.info(`Created application audio capture targeting ${GAME_EXECUTABLE}`);
+          logger.info(`Created application audio capture targeting ${gameExecutable}`);
         }
       } catch (error) {
         logger.warn('Failed to set up application audio capture:', error);
       }
+
+      // Scenes that survive from an earlier session still point at whichever
+      // build that session launched, so retarget both inputs every setup.
+      await this.retargetCaptureInput(GAME_CAPTURE_INPUT_NAME, {
+        capture_mode: 'window',
+        window: windowTarget,
+        priority: 2,
+      });
+      await this.retargetCaptureInput(GAME_AUDIO_INPUT_NAME, {
+        window: windowTarget,
+        priority: 2,
+      });
 
       // Mute default audio sources so only game audio is captured
       await this.muteDefaultAudioSources();

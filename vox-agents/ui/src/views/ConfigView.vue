@@ -13,6 +13,7 @@ import ApiKeysSection from '../components/config/ApiKeysSection.vue';
 import ModelDiscoveryDialog from '../components/config/ModelDiscoveryDialog.vue';
 import ModelDefinitions from '../components/config/ModelDefinitions.vue';
 import PathSettingsSection from '../components/config/PathSettingsSection.vue';
+import GameSettingsSection from '../components/config/GameSettingsSection.vue';
 import ModelOptionsDialog from '../components/config/ModelOptionsDialog.vue';
 import SetupWizard from '../components/config/SetupWizard.vue';
 import {
@@ -357,6 +358,11 @@ function updatePathSettings(updatedConfig: VoxAgentsConfig): void {
   storeNonLlmConfig(updatedConfig);
 }
 
+/** Retain the launch settings emitted by the game settings section. */
+function updateGameSettings(updatedConfig: VoxAgentsConfig): void {
+  storeNonLlmConfig(updatedConfig);
+}
+
 /** Rehydrate the editable form immediately after the setup wizard saves a configuration. */
 function updateWizardConfig(updatedConfig: VoxAgentsConfig): void {
   rehydrateLlmForm(updatedConfig.llms);
@@ -414,6 +420,8 @@ function updateWizardConfig(updatedConfig: VoxAgentsConfig): void {
     <ApiKeysSection v-model="apiKeys" />
 
     <PathSettingsSection v-if="config" :config="config" @update:config="updatePathSettings" />
+
+    <GameSettingsSection v-if="config" :config="config" @update:config="updateGameSettings" />
 
     <AgentModelMappings
       v-model:mappings="visibleMappings"

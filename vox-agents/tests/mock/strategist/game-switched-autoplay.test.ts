@@ -28,10 +28,13 @@ vi.mock('../../../src/utils/models/mcp-client.js', async () => {
 vi.mock('../../../src/infra/vox-civilization.js', () => ({
   voxCivilization: {
     onGameExit: vi.fn(),
+    onGameBound: vi.fn(),
     killGame: vi.fn(async () => {}),
     restoreRandomSeeds: vi.fn(async () => {}),
     updateSkipAnimations: vi.fn(async () => {}),
     setAiObserver: vi.fn(),
+    setUseDX11: vi.fn(),
+    getGameExecutable: vi.fn(() => 'CivilizationV_DX11.exe'),
     startGame: vi.fn(async () => false),
   },
 }));

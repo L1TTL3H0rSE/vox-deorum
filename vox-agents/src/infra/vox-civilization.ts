@@ -24,6 +24,10 @@ import {
   isProcessRunning as isWindowsProcessRunning,
   killProcess
 } from '../utils/game/windows-process.js';
+import {
+  civ5ExecutableCandidates,
+  resolveCiv5Executable
+} from '../utils/game/civ5-executable.js';
 
 const logger = createLogger('VoxCivilization');
 const launchPollIntervalMs = 1000;
@@ -33,6 +37,7 @@ const launchTimeoutMs = 30000;
 // environment startGame builds: machine plumbing only, nothing user-specific.
 const systemEnvNames = ['COMSPEC', 'PATHEXT', 'PATH', 'SystemDrive', 'SystemRoot', 'TEMP', 'TMP', 'windir'];
 type ExitCallback = (code: number | null) => void;
+type BoundCallback = (imageName: string) => void;
 
 interface SeedRestoreState {
   path: string;
@@ -60,24 +65,44 @@ interface SeedRestoreState {
  */
 export class VoxCivilization {
   private exitCallbacks: Set<ExitCallback> = new Set();
+  private boundCallbacks: Set<BoundCallback> = new Set();
   private monitoring = false;
   private externalProcessPid: number | null = null;
   private pollInterval: NodeJS.Timeout | null = null;
   private aiObserverEnabled = false;
+  private useDX11 = true;
+  // Image name the bound process actually runs under. The launch script can
+  // fall back to the default binary, so this is the only reliable answer once
+  // a game is running.
+  private boundImageName: string | null = null;
   // Previous config.ini seed values are captured so each launch can restore the
   // user's normal Civ behavior after the game has read the startup settings.
   private seedRestoreState?: SeedRestoreState;
 
   /**
-   * Finds and binds to an existing CivilizationV.exe process.
+   * Looks for a running Civilization V process, preferred build first.
+   *
+   * @private
+   * @returns The process ID and the image name it was found under, or null
+   */
+  private async findGameProcess(): Promise<{ pid: number; imageName: string } | null> {
+    for (const imageName of civ5ExecutableCandidates(this.useDX11)) {
+      const pid = await findProcessByImageName(imageName);
+      if (pid) return { pid, imageName };
+    }
+    return null;
+  }
+
+  /**
+   * Finds and binds to an existing Civilization V process.
    *
    * @private
    * @returns True if found and bound successfully, false otherwise
    */
   private async bindToExistingProcess(): Promise<boolean> {
-    const pid = await findProcessByImageName('CivilizationV.exe');
-    if (pid) {
-      this.bindProcess(pid);
+    const found = await this.findGameProcess();
+    if (found) {
+      this.bindProcess(found.pid, found.imageName);
       return true;
     } else {
       return false;
@@ -85,11 +110,19 @@ export class VoxCivilization {
   }
 
   /** Records a discovered Civilization V process and begins monitoring it. */
-  private bindProcess(pid: number): void {
-    logger.info(`Found existing CivilizationV.exe process (PID: ${pid})`);
+  private bindProcess(pid: number, imageName: string = resolveCiv5Executable(this.useDX11)): void {
+    logger.info(`Found existing ${imageName} process (PID: ${pid})`);
     this.externalProcessPid = pid;
+    this.boundImageName = imageName;
     this.monitoring = true;
     this.startProcessMonitoring();
+    this.boundCallbacks.forEach(callback => {
+      try {
+        callback(imageName);
+      } catch (error) {
+        logger.error('Error in bound callback:', error);
+      }
+    });
   }
 
   /** Waits for a launched Civilization V process while the launcher remains active. */
@@ -105,10 +138,10 @@ export class VoxCivilization {
     try {
       for (let elapsed = 0; elapsed < launchTimeoutMs; elapsed += launchPollIntervalMs) {
         if (launchError) throw launchError;
-        const pid = await findProcessByImageName('CivilizationV.exe');
+        const found = await this.findGameProcess();
         if (launchError) throw launchError;
-        if (pid) {
-          this.bindProcess(pid);
+        if (found) {
+          this.bindProcess(found.pid, found.imageName);
           return true;
         }
         await setTimeout(launchPollIntervalMs);
@@ -370,6 +403,24 @@ export class VoxCivilization {
   }
 
   /**
+   * Chooses the Civilization V build to launch.
+   *
+   * @param enabled - When true, launch the DirectX 11 binary if the install has one
+   */
+  setUseDX11(enabled: boolean): void {
+    this.useDX11 = enabled;
+    logger.debug(`DirectX 11 build ${enabled ? 'preferred' : 'disabled'}`);
+  }
+
+  /**
+   * Image name of the running game, or of the build the next launch will ask for.
+   * Useful for anything that has to target the game window or process by name.
+   */
+  getGameExecutable(): string {
+    return this.boundImageName ?? resolveCiv5Executable(this.useDX11);
+  }
+
+  /**
    * Starts a Civilization V game with the specified Lua script.
    * Waits for the game process to fully initialize before returning.
    *
@@ -412,13 +463,15 @@ export class VoxCivilization {
 
       const scriptPath = join('scripts', 'launch-civ5.cmd');
 
-      logger.info(`Launching Civilization V with script: ${actualLuaName}${visualMode ? " in visual production mode" : ""}`);
+      const gameExecutable = resolveCiv5Executable(this.useDX11);
+      logger.info(`Launching ${gameExecutable} with script: ${actualLuaName}${visualMode ? " in visual production mode" : ""}`);
 
       // Launch the script, then bind as soon as its direct Civilization V
       // child appears. Direct launches keep the script alive for the game's
       // lifetime, so waiting for its exit would block the session startup.
-      const args = ['/c', scriptPath, actualLuaName];
-      if (visualMode) args.push('production');
+      // The launch script reads production mode from the second positional and
+      // the executable from the third, so the mode token is always present.
+      const args = ['/c', scriptPath, actualLuaName, visualMode ? 'production' : 'standard', gameExecutable];
 
       // Run the launch chain on a minimal environment rather than a copy of
       // ours, so secrets like API keys never reach the game process. The
@@ -464,6 +517,15 @@ export class VoxCivilization {
   }
 
   /**
+   * Registers a callback for every process bind, launched or attached.
+   * It receives the image name the process actually runs under.
+   * @param callback Function to call when a game process is bound
+   */
+  onGameBound(callback: BoundCallback): void {
+    this.boundCallbacks.add(callback);
+  }
+
+  /**
    * Removes a previously registered exit callback
    * @param callback Callback to remove
    */
@@ -493,6 +555,7 @@ export class VoxCivilization {
     logger.info(`Game exited with code: ${code}`);
     this.monitoring = false;
     this.externalProcessPid = null;
+    this.boundImageName = null;
     this.stopProcessMonitoring();
 
     // Notify all registered callbacks
@@ -543,7 +606,9 @@ export class VoxCivilization {
     this.stopProcessMonitoring();
     this.monitoring = false;
     this.externalProcessPid = null;
+    this.boundImageName = null;
     this.exitCallbacks.clear();
+    this.boundCallbacks.clear();
   }
 }
 

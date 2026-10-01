@@ -70,6 +70,7 @@ import {
 } from '../../../src/utils/game/windows-process.js';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { spawn } from 'child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const mReadConfigSeeds = vi.mocked(readCivConfigSeedsContent);
 const mUpdateConfigSeeds = vi.mocked(updateCivConfigSeedsContent);
@@ -205,7 +206,7 @@ describe('VoxCivilization (mock tier)', () => {
       const started = await civ.startGame('LoadMods.lua');
 
       expect(started).toBe(true);
-      expect(mFindProcess).toHaveBeenCalledWith('CivilizationV.exe');
+      expect(mFindProcess).toHaveBeenCalledWith('CivilizationV_DX11.exe');
       // Bound to the existing process: no spawn, no seed rewrite, state reflects PID.
       expect(mSpawn).not.toHaveBeenCalled();
       expect(mUpdateConfigSeeds).not.toHaveBeenCalled();
@@ -241,7 +242,7 @@ describe('VoxCivilization (mock tier)', () => {
       // The player closed Civ V by hand, so tasklist finds nothing until the relaunch.
       const child = new FakeChild();
       mSpawn.mockReturnValue(child as never);
-      mFindProcess.mockResolvedValueOnce(null).mockResolvedValue(4040);
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(4040);
 
       const started = await civ.startGame('LoadMods.lua');
 
@@ -370,9 +371,10 @@ describe('VoxCivilization (mock tier)', () => {
       process.env.VOX_RL_CAPTURE = '1';
       // Stand-in for the secrets our environment can carry (API keys and friends).
       process.env.VOX_TEST_SECRET = 'do-not-leak';
-      // First lookup finds no running game. The first launch poll finds the
-      // direct child without requiring the launcher script to exit.
-      mFindProcess.mockResolvedValueOnce(null).mockResolvedValue(1212);
+      // The pre-launch round finds no running game under either image name.
+      // The first launch poll finds the direct child without requiring the
+      // launcher script to exit.
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(1212);
 
       const child = new FakeChild();
       mSpawn.mockReturnValue(child as never);
@@ -396,10 +398,80 @@ describe('VoxCivilization (mock tier)', () => {
     });
   });
 
+  describe('DirectX 11 build selection', () => {
+    it('asks the launcher for the DirectX 11 build by default', async () => {
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(7001);
+      const child = new FakeChild();
+      mSpawn.mockReturnValue(child as never);
+      const civ = new VoxCivilization();
+
+      await expect(civ.startGame('LoadMods.lua')).resolves.toBe(true);
+
+      const args = mSpawn.mock.calls[0][1] as string[];
+      // Positional order: lua script, production mode, executable.
+      expect(args[args.length - 1]).toBe('CivilizationV_DX11.exe');
+      expect(args[args.length - 2]).toBe('standard');
+      expect(civ.getGameExecutable()).toBe('CivilizationV_DX11.exe');
+
+      civ.destroy();
+    });
+
+    it('keeps the production token in place when visual mode is on', async () => {
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(7002);
+      const child = new FakeChild();
+      mSpawn.mockReturnValue(child as never);
+      const civ = new VoxCivilization();
+
+      await civ.startGame('LoadMods.lua', undefined, true);
+
+      const args = mSpawn.mock.calls[0][1] as string[];
+      expect(args[args.length - 2]).toBe('production');
+      expect(args[args.length - 1]).toBe('CivilizationV_DX11.exe');
+
+      civ.destroy();
+    });
+
+    it('asks for the default build and searches only that name when DX11 is off', async () => {
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValue(7003);
+      const child = new FakeChild();
+      mSpawn.mockReturnValue(child as never);
+      const civ = new VoxCivilization();
+      civ.setUseDX11(false);
+
+      await expect(civ.startGame('LoadMods.lua')).resolves.toBe(true);
+
+      expect(mFindProcess).toHaveBeenCalledWith('CivilizationV.exe');
+      expect(mFindProcess).not.toHaveBeenCalledWith('CivilizationV_DX11.exe');
+      const args = mSpawn.mock.calls[0][1] as string[];
+      expect(args[args.length - 1]).toBe('CivilizationV.exe');
+
+      civ.destroy();
+    });
+
+    it('binds to the default build when the launcher falls back to it', async () => {
+      // DX11 is requested but the install has no such binary, so the game
+      // only ever shows up under the default image name.
+      mFindProcess.mockImplementation(async (imageName: string) =>
+        imageName === 'CivilizationV.exe' ? 8008 : null
+      );
+      const civ = new VoxCivilization();
+      const bound: string[] = [];
+      civ.onGameBound((imageName) => bound.push(imageName));
+
+      await expect(civ.startGame('LoadMods.lua')).resolves.toBe(true);
+
+      expect(civ.getProcessId()).toBe(8008);
+      expect(civ.getGameExecutable()).toBe('CivilizationV.exe');
+      expect(bound).toEqual(['CivilizationV.exe']);
+
+      civ.destroy();
+    });
+  });
+
   describe('crash-recovery / launch-failure handling', () => {
     it('restores seeds when the launch script fails for a brand-new StartGame', async () => {
-      // No existing process -> proceeds to spawn the launch script.
-      mFindProcess.mockResolvedValueOnce(null);
+      // No existing process under either image name -> spawns the launch script.
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
       mReadConfigSeeds.mockReturnValue({ sync: 'origSync', map: 'origMap' });
 
       const child = new FakeChild();
@@ -427,23 +499,36 @@ describe('VoxCivilization (mock tier)', () => {
     });
 
     it('waits through a delayed direct launch and binds when Civilization V appears', async () => {
-      mFindProcess
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue(4321);
+      // The game does not exist before the spawn, and stays invisible for the
+      // first two poll rounds after it. Rounds are counted on the preferred
+      // (DX11) image name, which every round checks first.
+      const visibleFromRound = 3;
+      let launched = false;
+      let launchRounds = 0;
       const child = new FakeChild();
-      mSpawn.mockReturnValue(child as never);
+      mSpawn.mockImplementation(() => {
+        launched = true;
+        return child as never;
+      });
+      mFindProcess.mockImplementation(async (imageName: string) => {
+        if (!launched || imageName !== 'CivilizationV_DX11.exe') return null;
+        launchRounds++;
+        return launchRounds >= visibleFromRound ? 4321 : null;
+      });
 
       const civ = new VoxCivilization();
 
       await expect(civ.startGame('LoadMods.lua')).resolves.toBe(true);
-      expect(mFindProcess).toHaveBeenCalledTimes(3);
+      expect(launchRounds).toBe(visibleFromRound);
+      // One sleep between each pair of poll rounds, none after the hit.
+      expect(vi.mocked(sleep)).toHaveBeenCalledTimes(visibleFromRound - 1);
       expect(civ.getProcessId()).toBe(4321);
+      expect(civ.getGameExecutable()).toBe('CivilizationV_DX11.exe');
       civ.destroy();
     });
 
     it('restores seeds when the launcher reports an error before Civilization V appears', async () => {
-      mFindProcess.mockResolvedValueOnce(null);
+      mFindProcess.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
       mReadConfigSeeds.mockReturnValue({ sync: 'origSync', map: 'origMap' });
       const child = new FakeChild();
       mSpawn.mockReturnValue(child as never);
@@ -470,7 +555,7 @@ describe('VoxCivilization (mock tier)', () => {
       const civ = new VoxCivilization();
 
       await expect(civ.startGame('StartGame.lua')).resolves.toBe(false);
-      expect(mFindProcess).toHaveBeenCalledTimes(31);
+      expect(mFindProcess).toHaveBeenCalledTimes(62);
       expect(mUpdateConfigSeeds).toHaveBeenLastCalledWith('[CONFIG]\n', {
         sync: 'origSync',
         map: 'origMap',

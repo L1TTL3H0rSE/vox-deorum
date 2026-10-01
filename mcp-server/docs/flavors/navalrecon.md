@@ -155,6 +155,8 @@ These technologies become significantly more attractive to leaders with high nav
 - Identifying potential settlement locations
 - Monitoring enemy naval activity
 
+As with FLAVOR_RECON, this assignment has a tactical cost that is easy to miss. `CvUnit::canUseForTacticalAI` rejects any unit holding an explore role, so a ship promoted to `UNITAI_EXPLORE_SEA` leaves the tactical pool for as long as it keeps that role.
+
 ### Advisor Recommendations
 
 **Advisor System Integration**: FLAVOR_NAVAL_RECON affects advisor recommendations:

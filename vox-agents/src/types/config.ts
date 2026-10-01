@@ -117,6 +117,8 @@ export interface VoxAgentsConfig {
   obs?: ObsConfig;
   /** Default triage for every seat when neither the seat nor the session sets one. */
   triage?: TriageSetting;
+  /** Launch the DirectX 11 build of Civilization V when the install has one. Defaults to true. */
+  useDX11?: boolean;
 }
 
 /**

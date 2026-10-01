@@ -219,6 +219,8 @@ These are updated from scratch each turn via `UpdateExplorePlotsFromScratch()` a
 
 Units can be dynamically reassigned to/from these roles based on recon state.
 
+This reassignment reaches the tactical level, which is easy to miss. `CvUnit::canUseForTacticalAI` rejects any unit holding an explore role, because Homeland owns explorers. So when `DoReconState` promotes a warrior or a spearman to `UNITAI_EXPLORE`, that unit stops being available for tactical work on the same turn: it will not join an attack, a barbarian camp clear, or a zone defence until recon state demotes it again. Raising FLAVOR_RECON therefore does not only add scouts, it quietly withdraws combat units from the tactical pool, one per turn, for as long as the explorer target stays unmet.
+
 ### Economic AI Strategies
 
 - **ECONOMICAISTRATEGY_NEED_RECON**: Active when more land explorers needed

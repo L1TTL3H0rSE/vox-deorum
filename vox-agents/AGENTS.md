@@ -35,7 +35,7 @@ Backend LLM agent framework. For UI development, see `ui/AGENTS.md`.
 
 - **Mock** (`tests/mock/**`): Default in-process mock tier. Telepathist coverage lives in `tests/mock/telepathist` and can skip when recorded telemetry is unavailable.
 - **Real** (`tests/real/**`): Reserved for a future out-of-process real MCP Server and mock Bridge bottom. `npm run test:real` currently passes with no tests.
-- **Game** (`tests/live/game/**`): Live Civilization V tier. Launches CivilizationV.exe with long timeouts and sequential execution through `singleFork: true`.
+- **Game** (`tests/live/game/**`): Live Civilization V tier. Launches Civilization V with long timeouts and sequential execution through `singleFork: true`.
 - **OBS** (`tests/live/obs/**`): Live OBS tier. Requires OBS Studio with its WebSocket server and skips gracefully when OBS is unreachable.
 
 ### Test Rules

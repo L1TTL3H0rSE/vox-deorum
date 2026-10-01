@@ -225,7 +225,7 @@ echo   - Vox Agents (Port: %VOX_PORT%, Mode: %VOX_MODE%, PID: %VOX_PID%)
 echo     %VOX_SHUTDOWN_URL%
 echo.
 echo Press Q to stop all services.
-echo Press K to stop all services, then kill CivilizationV.exe.
+echo Press K to stop all services, then kill Civilization V.
 
 :monitor_loop
 choice /c QKT /n /t 1 /d T >nul
@@ -239,7 +239,7 @@ if "!CHOICE_RESULT!"=="1" (
 )
 if "!CHOICE_RESULT!"=="2" (
     set "PENDING_ACTION=K"
-    set "CONFIRM_PROMPT=Stop all services and kill CivilizationV.exe? (Y/N)"
+    set "CONFIRM_PROMPT=Stop all services and kill Civilization V? (Y/N)"
     goto :confirm_shutdown
 )
 if "!CHOICE_RESULT!"=="3" goto :monitor_loop
@@ -254,7 +254,7 @@ if errorlevel 1 goto :unexpected_exit
 if "!CONFIRM_RESULT!"=="1" (
     if "!PENDING_ACTION!"=="K" (
         set "KILL_CIV_MODE=1"
-        echo [INFO] Kill-game mode selected. Services will stop first, then CivilizationV.exe will be force-killed if found.
+        echo [INFO] Kill-game mode selected. Services will stop first, then Civilization V will be force-killed if found.
     )
     goto :normal_shutdown
 )
@@ -270,16 +270,16 @@ call :shutdown_services
 
 if defined KILL_CIV_MODE (
     echo.
-    echo [INFO] Looking for CivilizationV.exe...
+    echo [INFO] Looking for Civilization V...
     call :find_civ_pid
     if defined CIV_PID (
-        echo [INFO] Found CivilizationV.exe with PID: !CIV_PID!
-        echo [INFO] Force-killing CivilizationV.exe...
+        echo [INFO] Found !CIV_IMAGE! with PID: !CIV_PID!
+        echo [INFO] Force-killing !CIV_IMAGE!...
         taskkill /PID !CIV_PID! /T /F >nul 2>&1
         call :wait_for_exit "!CIV_PID!" 5 >nul 2>&1
-        echo [INFO] CivilizationV.exe kill requested.
+        echo [INFO] !CIV_IMAGE! kill requested.
     ) else (
-        echo [INFO] CivilizationV.exe is not running.
+        echo [INFO] Civilization V is not running.
     )
 )
 
@@ -520,13 +520,20 @@ del "%VOX_EXIT_FILE%" 2>nul
 exit /b 0
 
 :find_civ_pid
+:: Vox Deorum launches the DirectX 11 build by default and the plain one when
+:: the install has no DirectX 11 binary, so look for both image names.
 set "CIV_PID="
-for /f "usebackq skip=1 tokens=1,2 delims=," %%a in (`tasklist /FI "IMAGENAME eq CivilizationV.exe" /FO CSV 2^>nul`) do (
-    set "CIV_IMAGE=%%~a"
-    set "CIV_PID=%%~b"
-    goto :find_civ_pid_done
+set "CIV_IMAGE="
+for %%I in (CivilizationV_DX11.exe CivilizationV.exe) do (
+    if not defined CIV_PID (
+        for /f "usebackq skip=1 tokens=1,2 delims=," %%a in (`tasklist /FI "IMAGENAME eq %%I" /FO CSV 2^>nul`) do (
+            if not defined CIV_PID (
+                set "CIV_IMAGE=%%~a"
+                set "CIV_PID=%%~b"
+            )
+        )
+    )
 )
-:find_civ_pid_done
 exit /b 0
 
 :startup_failed

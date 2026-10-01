@@ -10,6 +10,7 @@ Common problems and how to fix them, in the order you'll meet them. If your issu
 | Setup rejects a key or cannot load models | Use the wizard's message to correct the key or connection; see below. |
 | Codex login doesn't start or finish | Use the sign-in page and code shown in the dashboard; see below. |
 | Mod doesn't seem active | Start games from the dashboard's Play page; see below. |
+| Game won't start, or starts with graphics trouble | Try turning off **Use DX11** in Settings; see below. |
 | Turn or AI looks frozen (game running) | Make sure the game isn't paused. |
 | Game crashed or connection lost mid-game | Vox Deorum reconnects and relaunches on its own; wait it out; see below. |
 | Spokesperson chat doesn't reply | Confirm your credential works and the game is running; check the console for errors. |
@@ -46,6 +47,10 @@ If login still fails, the [developer Operations page](../developers/operations.m
 ## The mod doesn't seem active
 
 Start games from the dashboard's **Play** page: that launch brings up Civ V with the mods and the AI ready. If the game still can't find the mods after installing, re-run the installer: it reinstalls the mod files and clears the game's cached localization text.
+
+## The game won't start, or looks wrong when it does
+
+Vox Deorum launches the DirectX 11 build of Civilization V by default, which is the build it is developed against. Installs without that build fall back to the standard one by themselves. If the game fails to start, crashes early, or shows visual corruption, turn off **Use DX11** in the Settings page's **Game Settings** card and start a new session; recording and livestreaming are tuned for the DirectX 11 build, so expect capture to be less reliable with the setting off.
 
 ## The AI isn't doing anything, or a turn seems stuck
 

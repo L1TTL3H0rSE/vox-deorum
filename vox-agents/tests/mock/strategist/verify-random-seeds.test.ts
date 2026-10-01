@@ -5,7 +5,7 @@
  *
  * The comparison reads through the real getMetadata wrapper, so it's driven entirely by
  * the shared mcpClient fixture (no live server). vox-civilization is mocked so the
- * mismatch branch's killGame() is observable and the constructor's onGameExit() is inert.
+ * mismatch branch's killGame() is observable and the constructor's listener registrations are inert.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -19,6 +19,7 @@ vi.mock('../../../src/utils/models/mcp-client.js', async () => {
 vi.mock('../../../src/infra/vox-civilization.js', () => ({
   voxCivilization: {
     onGameExit: vi.fn(),
+    onGameBound: vi.fn(),
     killGame: vi.fn(async () => {}),
     restoreRandomSeeds: vi.fn(async () => {}),
   },

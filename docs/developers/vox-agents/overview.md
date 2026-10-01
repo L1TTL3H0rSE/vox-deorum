@@ -87,7 +87,7 @@ Each context has a stable ID. For a strategist player it is `{gameID}-player-{pl
 
 A `VoxSession` (`src/infra/vox-session.ts`) is a long-running workflow: a game being played, or a narrator pipeline stage. It has a state machine (starting, running, recovering, stopping) that the web UI can display and control. `StrategistSession` is the main implementation; the [media pipeline](media.md) stages are others.
 
-Sessions that launch the game itself do so through `VoxCivilization` (`src/infra/vox-civilization.ts`). It generates launch Lua from templates, prepares Civ's `config.ini` (including the random seeds described in [strategist.md](strategist.md)), spawns and binds to the CivilizationV.exe process, and kills it on shutdown.
+Sessions that launch the game itself do so through `VoxCivilization` (`src/infra/vox-civilization.ts`). It generates launch Lua from templates, prepares Civ's `config.ini` (including the random seeds described in [strategist.md](strategist.md)), spawns and binds to the Civilization V process, and kills it on shutdown. The `useDX11` setting (on by default) picks the DirectX 11 binary; the launch script falls back to the standard one on installs without it, so the manager watches for both image names and reports the one it bound through `getGameExecutable`.
 
 Three global registries tie the process together:
 

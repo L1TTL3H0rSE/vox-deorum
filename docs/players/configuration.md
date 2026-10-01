@@ -56,6 +56,12 @@ Each decision the AI makes and each spokesperson reply goes through the provider
 - Watch usage on your provider's billing page and set limits if it offers them.
 - Run a local model and pay nothing per turn; see [Running local models](#running-local-models).
 
+## Game settings
+
+The **Game Settings** card on the Settings page covers how Vox Deorum starts Civilization V.
+
+**Use DX11** is on by default and launches the DirectX 11 build of the game. It is the build Vox Deorum is developed against, and it is what the headless rendering and the OBS capture used by recording and livestreaming expect. Installs without a DirectX 11 build fall back to the standard one on their own, so the setting is safe to leave on. Turn it off if the DirectX 11 build misbehaves on your hardware and you want the standard build instead.
+
 ## Running local models
 
 To play fully offline or without per-turn costs, run a model on your own machine with [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai), or any server that speaks OpenAI's format. Choose the local option in the Setup wizard and enter the server's address; Vox Deorum checks the server, lists its models, and lets you pick one. The address stays editable in Settings. Local models run free and offline, and your hardware sets their speed and skill. A hosted model still plays the sharpest games.
