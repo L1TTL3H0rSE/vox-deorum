@@ -332,7 +332,7 @@ describe('text-cleaning', () => {
       expect(out).toMatch(/text response/);
     });
 
-    it('defaults to "tool" terminology (byte-identical to before)', () => {
+    it('defaults to "tool" terminology', () => {
       const out = buildRescuePrompt('required');
       expect(out).toContain('tool calls');
       expect(out).toContain('available tools');

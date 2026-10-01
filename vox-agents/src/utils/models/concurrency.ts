@@ -10,7 +10,7 @@
  */
 
 import pLimit from 'p-limit';
-import { streamText, TextStreamPart, ToolSet } from 'ai';
+import { streamText, TextStreamPart, ToolChoiceViolationError, ToolSet } from 'ai';
 import { executionTimeoutDefault, exponentialRetry } from '../retry.js';
 import { createLogger } from '../logger.js';
 import { isHostCapabilityProvider } from './providers/host-tools.js';
@@ -202,6 +202,17 @@ export async function streamTextWithConcurrency<T extends Parameters<typeof stre
         },
         onStepEnd: (results: any) => {
           if (maxIteration === iteration) originalOnStepEnd?.(results);
+        },
+        // Log stream errors through Winston instead of the AI SDK's console.error default.
+        // A missed required tool call is expected: the step still resolves with its reasoning
+        // and text, and VoxAgent.prepareStep asks the model to try again.
+        onError: ({ error }: { error: unknown }) => {
+          if (maxIteration !== iteration) return;
+          if (ToolChoiceViolationError.isInstance(error)) {
+            logger.debug(`[${modelName}] Response skipped a required tool call`);
+            return;
+          }
+          logger.warn(`[${modelName}] Stream error`, error);
         },
         experimental_transform: () => {
           return new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({

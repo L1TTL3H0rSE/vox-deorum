@@ -157,16 +157,17 @@ export function formatToolResultOutput(part: ToolResultLike, maxLength: number =
 }
 
 /**
- * Builds a recovery prompt for empty response rescue.
- * The prompt varies based on the effective toolChoice to guide the model appropriately.
+ * Builds a recovery prompt for a step that ended without the expected output.
+ * The prompt varies based on the effective toolChoice to guide the model appropriately:
+ * a forced tool choice may follow a reply that had text, so that branch does not call it empty.
  * `framing` keeps the terminology ("tool" vs "action") consistent with the injected
  * instructions so the retry does not point a claude-code model at its built-in tools.
- * Defaults to `'tool'`, which reproduces the historical wording byte-for-byte.
+ * Defaults to `'tool'`.
  */
 export function buildRescuePrompt(toolChoice: string, framing: ToolCallFraming = 'tool'): string {
   const noun = framing === 'action' ? 'action' : 'tool';
   if (toolChoice === "required" || toolChoice === "tool") {
-    return `Your previous response was empty and did not include any ${noun} calls. You MUST call one or more of the available ${noun}s in the given format. Please try again.`;
+    return `Your previous response did not include any ${noun} calls. You MUST call one or more of the available ${noun}s in the given format. Please try again.`;
   }
   return `Your previous response was empty. Please provide either a text response or PROPERLY call one or more of the available ${noun}s in the given format.`;
 }

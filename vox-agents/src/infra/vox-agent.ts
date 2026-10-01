@@ -476,12 +476,20 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
     if (lastStep === null) {
       config.messages = [...messages];
     } else if (lastStep.toolCalls.length === 0 && (toolChoice === "required" || toolChoice === "tool" || !lastStep.text?.trim())) {
-      // Empty response rescue: no tool calls and no text: strip response and prompt to retry
+      // Rescue a step that ended without a tool call (or, under auto, without any text). A reply
+      // with text stays in the history, reasoning included, so the retry builds on what the model
+      // already worked out. An empty or reasoning-only reply is stripped: providers can reject it
+      // (OpenAI requires a reasoning item to be followed by output).
       const baseMessages = config.messages || messages;
       const responseMessages = lastStep.response.messages;
-      const cleaned = baseMessages.filter(
-        msg => !responseMessages.some(respMsg => respMsg === msg)
-      );
+      // Checks the cleaned response messages, not lastStep.text: tool-rescue artifact cleanup may
+      // have removed every text part from the copy that joined the history.
+      const keepReply = responseMessages.some(msg => typeof msg.content === 'string'
+        ? msg.content.trim() !== ''
+        : msg.content.some(part => part.type === 'text' && part.text.trim() !== ''));
+      const cleaned = keepReply
+        ? [...baseMessages]
+        : baseMessages.filter(msg => !responseMessages.some(respMsg => respMsg === msg));
       // Match the rescue wording to the model's framing so a claude-code model is
       // asked for an "action", not pointed at its host "tools".
       const rescueFraming = resolveToolFraming(this.getModel(
