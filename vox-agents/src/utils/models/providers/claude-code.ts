@@ -8,7 +8,11 @@ import { wrapLanguageModel } from 'ai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { createClaudeCode, type ClaudeCodeSettings } from 'ai-sdk-provider-claude-code';
 import type { Model } from '../../../types/index.js';
-import { claudeCodeResponseMiddleware, guardClaudeCodeQueryUsageLimits } from './claude-code-response.js';
+import {
+  claudeCodeResponseMiddleware,
+  guardClaudeCodeQueryUsageLimits,
+  hideClaudeCodeStructuredOutputResults,
+} from './claude-code-response.js';
 import { resolveHostToolAccess, seedHostWorkspaceGuide } from './host-tools.js';
 import type { HostToolAccess, ModelRuntimeIdentity } from './host-tools.js';
 
@@ -59,7 +63,10 @@ export function buildClaudeCodeModel(
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: {},
-    onQueryCreated: guardClaudeCodeQueryUsageLimits,
+    onQueryCreated: (query) => {
+      hideClaudeCodeStructuredOutputResults(query);
+      guardClaudeCodeQueryUsageLimits(query);
+    },
     // The provider forwards every ANTHROPIC_* variable to the Claude Code CLI,
     // which then bills the API key instead of the subscription login. Unset the
     // key so the CLI falls back to its own credentials; Node drops undefined

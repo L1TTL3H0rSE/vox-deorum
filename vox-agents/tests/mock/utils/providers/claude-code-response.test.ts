@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   claudeCodeResponseMiddleware,
   guardClaudeCodeQueryUsageLimits,
+  hideClaudeCodeStructuredOutputResults,
   isClaudeCodeUsageLimitNotice,
 } from '../../../../src/utils/models/providers/claude-code-response.js';
 
@@ -282,5 +283,82 @@ describe('Claude Code usage-limit handling', () => {
     await expect(drain(second.result.stream)).rejects.toMatchObject({ retryAt: now + 135_000 });
     expect(first.params.providerOptions.error).toMatchObject({ retryAt: now + 75_000 });
     expect(second.params.providerOptions.error).toMatchObject({ retryAt: now + 135_000 });
+  });
+});
+
+describe('Claude Code structured-output result hiding', () => {
+  /** Collect every message a guarded query yields. */
+  async function collect(query: any): Promise<any[]> {
+    const messages: any[] = [];
+    for await (const message of query) messages.push(message);
+    return messages;
+  }
+
+  /** Build a user message carrying tool results for the given ids. */
+  function toolResults(...ids: string[]): any {
+    return {
+      type: 'user',
+      message: { content: ids.map((id) => ({ type: 'tool_result', tool_use_id: id, content: 'ok' })) },
+    };
+  }
+
+  it('should drop results for StructuredOutput calls seen in assistant messages', async () => {
+    const query = queryFrom([
+      {
+        type: 'assistant',
+        message: { content: [
+          { type: 'tool_use', id: 'so-1', name: 'StructuredOutput', input: {} },
+          { type: 'tool_use', id: 'read-1', name: 'Read', input: {} },
+        ] },
+      },
+      toolResults('so-1', 'read-1'),
+    ]);
+    hideClaudeCodeStructuredOutputResults(query);
+
+    const messages = await collect(query);
+    expect(messages[1].message.content.map((block: any) => block.tool_use_id)).toEqual(['read-1']);
+  });
+
+  it('should drop results for StructuredOutput calls seen only in stream events', async () => {
+    const query = queryFrom([
+      {
+        type: 'stream_event',
+        event: { type: 'content_block_start', index: 0,
+          content_block: { type: 'tool_use', id: 'so-1', name: 'StructuredOutput', input: {} } },
+      },
+      toolResults('so-1'),
+    ]);
+    hideClaudeCodeStructuredOutputResults(query);
+
+    const messages = await collect(query);
+    expect(messages[1].message.content).toEqual([]);
+  });
+
+  it('should pass other tool results through unchanged', async () => {
+    const results = toolResults('read-1');
+    const query = queryFrom([
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'read-1', name: 'Read', input: {} }] } },
+      results,
+    ]);
+    hideClaudeCodeStructuredOutputResults(query);
+
+    const messages = await collect(query);
+    expect(messages[1]).toBe(results);
+  });
+
+  it('should compose with the usage-limit guard', async () => {
+    const query = queryFrom([
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'so-1', name: 'StructuredOutput', input: {} }] } },
+      toolResults('so-1'),
+      { type: 'assistant', message: { content: [{ type: 'text', text: notice }] } },
+    ]);
+    hideClaudeCodeStructuredOutputResults(query);
+    guardClaudeCodeQueryUsageLimits(query);
+
+    const seen: any[] = [];
+    await expect((async () => {
+      for await (const message of query) seen.push(message);
+    })()).rejects.toMatchObject({ isRetryable: true });
+    expect(seen[1].message.content).toEqual([]);
   });
 });

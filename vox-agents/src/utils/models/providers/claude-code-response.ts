@@ -1,5 +1,6 @@
 /**
- * Converts raw Claude Code usage-limit notices into reset-aware retryable errors.
+ * Normalizes raw Claude Code responses at the provider boundary: converts usage-limit
+ * notices into reset-aware retryable errors and hides structured-output tool results.
  */
 
 import type { LanguageModelMiddleware } from 'ai';
@@ -12,6 +13,8 @@ const fallbackDelay = 5 * 60 * 1000;
 const maximumResetDelay = 8 * 24 * 60 * 60 * 1000;
 const resetGracePeriod = 15 * 1000;
 const rawUsageLimitErrorStorage = new AsyncLocalStorage<PreserveClaudeCodeUsageLimitError>();
+// The CLI tool that carries a JSON responseFormat; the provider hides its calls.
+const structuredOutputToolName = 'StructuredOutput';
 
 /** A retryable Claude Code subscription-limit failure. */
 export interface ClaudeCodeUsageLimitError extends Error {
@@ -117,6 +120,46 @@ export function guardClaudeCodeQueryUsageLimits(
         const error = createUsageLimitError(text, resolveRetryAt(rejectedResetAt));
         (preserveError ?? rawUsageLimitErrorStorage.getStore())?.(error);
         throw error;
+      }
+      yield message;
+    }
+  };
+}
+
+/** Return the ids of internal StructuredOutput tool uses carried by a raw SDK message. */
+function getStructuredOutputToolIds(message: any): string[] {
+  const blocks = message?.type === 'assistant' && Array.isArray(message.message?.content)
+    ? message.message.content
+    : message?.type === 'stream_event' && message.event?.type === 'content_block_start'
+      ? [message.event.content_block]
+      : [];
+  return blocks
+    .filter((block: any) => block?.type === 'tool_use'
+      && block.name === structuredOutputToolName && typeof block.id === 'string')
+    .map((block: any) => block.id);
+}
+
+/**
+ * Drop tool results answering the internal StructuredOutput tool. The provider hides that
+ * tool's call but not its result, so the orphaned result would otherwise surface as a
+ * provider-executed `unknown-tool` call with empty input (ai-sdk-provider-claude-code 4.3.3).
+ */
+export function hideClaudeCodeStructuredOutputResults(query: Query): void {
+  const originalIterator = query[Symbol.asyncIterator].bind(query);
+  const source = { [Symbol.asyncIterator]: originalIterator };
+
+  (query as any)[Symbol.asyncIterator] = async function* () {
+    const structuredOutputIds = new Set<string>();
+    for await (const message of source) {
+      for (const id of getStructuredOutputToolIds(message)) structuredOutputIds.add(id);
+      const content = message?.type === 'user' ? (message as any).message?.content : undefined;
+      if (structuredOutputIds.size > 0 && Array.isArray(content)) {
+        const kept = content.filter((block: any) =>
+          !(block?.type === 'tool_result' && structuredOutputIds.has(block.tool_use_id)));
+        if (kept.length !== content.length) {
+          yield { ...message, message: { ...(message as any).message, content: kept } } as typeof message;
+          continue;
+        }
       }
       yield message;
     }
