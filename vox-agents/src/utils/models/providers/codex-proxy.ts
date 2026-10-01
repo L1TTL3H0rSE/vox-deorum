@@ -216,6 +216,8 @@ export class CodexProxyManager {
   private readonly openedDeviceLogins = new Map<CodexProxyChild, string>();
   private readonly ownedChildren = new Set<CodexProxyChild>();
   private loginPromptValue: CodexLoginPrompt | undefined;
+  /** Set once the browser was opened for a login, so restarted proxies do not open more tabs. */
+  private loginBrowserOpened = false;
 
   /** Creates a manager with production defaults or controlled test doubles. */
   constructor(dependencies: CodexProxyDependencies = {}) {
@@ -458,7 +460,7 @@ export class CodexProxyManager {
     logProxyRecord(this.dependencies.logger, record);
   }
 
-  /** Opens each device-login prompt once while keeping proxy output on the redacted log path. */
+  /** Opens the browser once per unfinished login, logging each device-login prompt while keeping proxy output on the redacted log path. */
   private openDeviceLogin(child: CodexProxyChild, record: unknown): void {
     if (this.stopped || child !== this.child || !isChildAlive(child)) return;
     if (!isRecord(record) || record.event !== 'device_code_login_started') return;
@@ -475,6 +477,8 @@ export class CodexProxyManager {
     this.loginPromptValue = { verificationUrl: parsedUrl.href, userCode };
     // Deliberately unredacted: the operator needs the one-time code to finish sign-in from any device.
     this.dependencies.logger.info(`Codex sign-in required: open ${parsedUrl.href} and enter code ${userCode}.`);
+    if (this.loginBrowserOpened) return;
+    this.loginBrowserOpened = true;
     void this.dependencies.openLoginUrl(parsedUrl.href, this.dependencies.platform).catch((error) => {
       this.dependencies.logger.warn(`Could not open Codex login in the default browser: ${errorMessage(error)}. Open the verification URL from the Codex proxy logs to finish login.`);
     });
@@ -542,6 +546,7 @@ export class CodexProxyManager {
   private installReady(generation: number): void {
     if (this.stopped || generation !== this.generation) throw new CodexProxyError('Codex proxy startup was superseded.', true);
     this.loginPromptValue = undefined;
+    this.loginBrowserOpened = false;
     this.stateValue = 'ready';
     this.dependencies.logger.info('Codex proxy is ready.');
   }
