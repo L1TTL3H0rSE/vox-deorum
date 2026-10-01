@@ -13,6 +13,7 @@ import { jsonToMarkdown } from "../utils/tools/json-to-markdown.js";
 import { getOffsetedTurn } from "../utils/prompts/game-speed.js";
 import { SimpleStrategistBase } from "../strategist/agents/simple-strategist-base.js";
 import { getLastBriefingState } from "./briefing-utils.js";
+import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 
 /**
  * A simple briefer agent that analyzes the game state and produces a concise briefing.
@@ -120,9 +121,7 @@ ${jsonToMarkdown(SituationData)}
 
 # Your Civilization
 ${jsonToMarkdown(YouAre)}`.trim(),
-      providerOptions: {
-        anthropic: { cacheControl: { type: 'ephemeral' } }
-      }
+      providerOptions: { ...cacheBreakpoint }
     }, {
       role: "user",
       content: `

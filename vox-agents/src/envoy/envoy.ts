@@ -12,6 +12,7 @@ import { VoxContext } from "../infra/vox-context.js";
 import { formatToolResultOutput, stripSpokenEcho } from "../utils/models/text-cleaning.js";
 import { audienceID, boundaryIndex, collectSpokenReply, identityOf, observerName, roleOf, speakerLabel, type DealRowRenderer } from "../utils/diplomacy/transcript/transcript-utils.js";
 import { sendMessageToolName } from "../utils/diplomacy/constants.js";
+import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 
 /**
  * Prompt-cache breakpoint strategy (Anthropic providers only; a no-op elsewhere).
@@ -35,14 +36,8 @@ import { sendMessageToolName } from "../utils/diplomacy/constants.js";
  *
  * Caching between game turns is out of scope (game state churns). A breakpoint only marks a
  * cache-WRITE point; lookup matches by content prefix, not by where breakpoints sat last request.
+ * The marker itself ({@link cacheBreakpoint}, one-hour entries) lives in `utils/models/cache-breakpoint.ts`.
  */
-
-/**
- * The breakpoint marker itself. Honored by the direct Anthropic provider, OpenRouter (whose
- * provider falls back to the `anthropic` key) and Vertex Anthropic. Spread into a message's
- * `providerOptions` to mark the end of a cacheable prefix; see the strategy note above.
- */
-export const cacheBreakpoint = { anthropic: { cacheControl: { type: "ephemeral" as const } } };
 
 /**
  * The Anthropic prompt cache accepts at most this many cache-control breakpoints per request; a

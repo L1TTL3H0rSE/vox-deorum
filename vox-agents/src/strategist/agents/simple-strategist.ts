@@ -12,6 +12,7 @@ import { VoxContext } from "../../infra/vox-context.js";
 import { getDecisionTurnContext, getRecentGameState, StrategistParameters } from "../strategy-parameters.js";
 import { jsonToMarkdown } from "../../utils/tools/json-to-markdown.js";
 import { SimpleBriefer } from "../../briefer/simple-briefer.js";
+import { cacheBreakpoint } from "../../utils/models/cache-breakpoint.js";
 
 /**
  * A simple strategist agent that analyzes the game state and sets an appropriate strategy.
@@ -84,9 +85,7 @@ ${jsonToMarkdown(Options, {
   configs: [{}]
 })}
 `.trim(),
-      providerOptions: {
-        anthropic: { cacheControl: { type: 'ephemeral' } }
-      }
+      providerOptions: { ...cacheBreakpoint }
     }, {
       role: "user",
       content: `

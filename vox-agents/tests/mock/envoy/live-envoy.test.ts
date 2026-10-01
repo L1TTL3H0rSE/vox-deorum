@@ -17,6 +17,7 @@ import { specialMessages } from '../../../src/envoy/envoy.js';
 import { speakerLabel } from '../../../src/utils/diplomacy/transcript/transcript-utils.js';
 import { buildGameContextMessages } from '../../../src/strategist/strategy-parameters.js';
 import { createFakeVoxContext } from '../../helpers/fake-vox-context.js';
+import { cacheBreakpoint } from '../../../src/utils/models/cache-breakpoint.js';
 
 const spokesperson = agentRegistry.get('spokesperson') as any;
 
@@ -161,7 +162,7 @@ describe('LiveEnvoy.getInitialMessages past/ongoing split (cache-aware record)',
     expect(past.content).toContain('> Rome, the leader (the counterpart): What are your borders?');
     expect(past.content).toContain('> Germany, the spokesperson (me): They are settled.');
     expect(past.content).not.toContain('Let us talk again.');
-    expect(past.providerOptions?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' });
+    expect(past.providerOptions?.anthropic?.cacheControl).toEqual(cacheBreakpoint.anthropic.cacheControl);
 
     // Rows after the mark render as native messages with [Turn N] speaker labels.
     const ongoing = messages.filter((m: any) => typeof m.content === 'string' && m.content.startsWith('[Turn'));
@@ -170,7 +171,7 @@ describe('LiveEnvoy.getInitialMessages past/ongoing split (cache-aware record)',
       '[Turn 5] Germany, the spokesperson: Gladly.',
     ]);
     // The last static breakpoint rides the LAST ongoing message only.
-    expect(ongoing[1].providerOptions?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' });
+    expect(ongoing[1].providerOptions?.anthropic?.cacheControl).toEqual(cacheBreakpoint.anthropic.cacheControl);
     expect(ongoing[0].providerOptions?.anthropic?.cacheControl).toBeUndefined();
   });
 
@@ -293,9 +294,9 @@ describe('LiveEnvoy prompt-cache reuse between runs at the same turn', () => {
 
     // The moving anchor is simply "the last committed row of THIS run": R1 breakpoints its incoming
     // question, R2 its own new one. Lookup matches by content, so this relocation costs nothing.
-    expect(bpOf(byContent(r1, BOUNDARY))).toEqual({ type: 'ephemeral' });
+    expect(bpOf(byContent(r1, BOUNDARY))).toEqual(cacheBreakpoint.anthropic.cacheControl);
     expect(bpOf(byContent(r2, BOUNDARY))).toBeUndefined();
-    expect(bpOf(byContent(r2, '[Turn 5] Rome, the leader: And the border along the river?'))).toEqual({ type: 'ephemeral' });
+    expect(bpOf(byContent(r2, '[Turn 5] Rome, the leader: And the border along the river?'))).toEqual(cacheBreakpoint.anthropic.cacheControl);
   });
 
   it('keeps the prefix stable when the previous run was multi-step (its reply carries reasoning)', async () => {

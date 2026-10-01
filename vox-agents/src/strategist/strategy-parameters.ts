@@ -11,6 +11,7 @@ import type { VictoryProgressReport } from "../../../mcp-server/dist/tools/knowl
 import type { GameMetadata } from "../../../mcp-server/dist/tools/knowledge/get-game-settings.js"
 import { StrategyDecisionType } from "../types/config.js";
 import type { HumanDecisionBus } from "./human-decision-bus.js";
+import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 
 /**
  * Parameters for the strategist agent
@@ -328,9 +329,7 @@ ${jsonToMarkdown(SituationData)}
 
 # Your Civilization
 ${jsonToMarkdown(YouAre)}`.trim(),
-      providerOptions: {
-        anthropic: { cacheControl: { type: 'ephemeral' } }
-      }
+      providerOptions: { ...cacheBreakpoint }
     }, {
       role: "user",
       content: `

@@ -8,7 +8,8 @@
  */
 
 import { ModelMessage, StepResult, Tool } from "ai";
-import { Envoy, cacheBreakpoint, markBreakpointOnLast, MAX_CACHE_BREAKPOINTS } from "./envoy.js";
+import { Envoy, markBreakpointOnLast, MAX_CACHE_BREAKPOINTS } from "./envoy.js";
+import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 import { StrategistParameters, buildGameContextMessages } from "../strategist/strategy-parameters.js";
 import { EnvoyThread } from "../types/index.js";
 import { VoxContext } from "../infra/vox-context.js";

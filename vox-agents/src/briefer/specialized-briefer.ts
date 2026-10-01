@@ -19,6 +19,7 @@ import { filterEventsByCategory, EventCategory } from "../utils/prompts/event-fi
 import { pickPlayerFields, omitPlayerFields, pickCityFields, omitCityFields } from "../utils/prompts/report-filters.js";
 import type { ConsolidatedEventsReport } from '../../../mcp-server/dist/tools/knowledge/get-events.js';
 import { SimpleStrategistBase } from "../strategist/agents/simple-strategist-base.js";
+import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 
 /**
  * Mode type for specialized briefer
@@ -312,9 +313,7 @@ ${jsonToMarkdown(SituationData)}
 
 # Your Civilization
 ${jsonToMarkdown(YouAre)}`.trim(),
-      providerOptions: {
-        anthropic: { cacheControl: { type: 'ephemeral' } }
-      }
+      providerOptions: { ...cacheBreakpoint }
     }, {
       role: "user",
       content: `

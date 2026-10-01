@@ -13,6 +13,7 @@ import { getDecisionTurnContext, getRecentGameState, StrategistParameters } from
 import { jsonToMarkdown } from "../../utils/tools/json-to-markdown.js";
 import { requestBriefing, assembleBriefings, briefingInstructionKeys, buildCombinedInstruction, clearBrieferInstructions } from "../../briefer/briefing-utils.js";
 import { getStrategicPlayersReport } from "../../utils/prompts/report-filters.js";
+import { cacheBreakpoint } from "../../utils/models/cache-breakpoint.js";
 
 /**
  * A staffed strategist agent that uses specialized briefers for comprehensive analysis.
@@ -134,9 +135,7 @@ Options: available strategic options for you.
 ${jsonToMarkdown(Options, {
   configs: [{}]
 })}`.trim(),
-      providerOptions: {
-        anthropic: { cacheControl: { type: 'ephemeral' } }
-      }
+      providerOptions: { ...cacheBreakpoint }
     }, {
       role: "user",
       content: `
