@@ -74,6 +74,14 @@ function streamFrom(chunks: any[]): ReadableStream<any> {
   });
 }
 
+/** Joins the text of every user message, which is where claude-code receives system content. */
+function userText(prompt: any[]): string {
+  return prompt
+    .filter((m: any) => m.role === 'user')
+    .flatMap((m: any) => m.content.map((c: any) => c.text ?? ''))
+    .join('\n\n');
+}
+
 /** Read every chunk out of a stream into an array. */
 async function drain(stream: ReadableStream<any>): Promise<any[]> {
   const out: any[] = [];
@@ -1201,8 +1209,9 @@ describe('claude-code provider', () => {
           providerOptions: {},
         });
         const calls = mocks.model.doGenerateCalls;
-        const sys = calls[calls.length - 1].prompt.find((m: any) => m.role === 'system');
-        expect(sys).toBeDefined();
+        const finalPrompt = calls[calls.length - 1].prompt;
+        expect(finalPrompt.some((m: any) => m.role === 'system')).toBe(false);
+        const sys = { content: userText(finalPrompt) };
         expect(sys.content).toContain(hostCapabilityInstruction(
           'claude-code',
           { read: true, write: false, web: false },
@@ -1247,9 +1256,8 @@ describe('claude-code provider', () => {
         { read: true, write: true, web: true },
       )!;
       for (const call of mocks.model.doGenerateCalls.slice(-2)) {
-        const systems = call.prompt.filter((message: any) => message.role === 'system');
-        expect(systems).toHaveLength(1);
-        const system = systems[0].content as string;
+        expect(call.prompt.some((message: any) => message.role === 'system')).toBe(false);
+        const system = userText(call.prompt);
         expect(system.split(hostInstruction)).toHaveLength(2);
         expect(system).toContain('## Available Actions');
         expect(system.indexOf(hostInstruction)).toBeLessThan(system.indexOf('## Available Actions'));
@@ -1267,8 +1275,7 @@ describe('claude-code provider', () => {
         providerOptions: {},
       });
       const calls = mocks.model.doGenerateCalls;
-      const sys = calls[calls.length - 1].prompt.find((m: any) => m.role === 'system');
-      expect(sys).toBeDefined();
+      const sys = { content: userText(calls[calls.length - 1].prompt) };
       // claude-code is always action-framed, regardless of built-in CLI tools.
       expect(sys.content).toContain('## Action Calling');
       expect(sys.content).not.toContain('## Tool Calling');
@@ -1276,10 +1283,8 @@ describe('claude-code provider', () => {
     });
 
     // Regression for the negotiator/diplomat prompt shape: a main system prompt + game context,
-    // then a TRAILING system nudge after the user messages. Without normalization the provider
-    // keeps only the trailing nudge, dropping the main prompt and the injected action schemas.
-    // Asserts the surviving system message carries both leading systems plus the schema block,
-    // and the trailing nudge is demoted to a user message.
+    // then a TRAILING system nudge after the user messages. Every system message, including the
+    // injected action schemas, must reach the provider as a user message in its original place.
     it('preserves the action schema block when the agent appends a trailing system message', async () => {
       const model = getModel({ provider: 'claude-code', name: 'haiku', options: { toolMiddleware: 'prompt' } });
       await (model as any).doGenerate({
@@ -1295,11 +1300,9 @@ describe('claude-code provider', () => {
         providerOptions: {},
       });
       const finalPrompt = mocks.model.doGenerateCalls.at(-1).prompt;
-      // Exactly one system message survives normalization (the one the provider keeps).
-      const systems = finalPrompt.filter((m: any) => m.role === 'system');
-      expect(systems).toHaveLength(1);
-      const sys = systems[0].content as string;
-      // It carries the agent's main prompt, the game context, AND the injected action schemas.
+      expect(finalPrompt.some((m: any) => m.role === 'system')).toBe(false);
+      const sys = userText(finalPrompt);
+      // The user turns carry the agent's main prompt, the game context, AND the injected action schemas.
       expect(sys).toContain('You are the deal negotiator for Brazil.');
       expect(sys).toContain('# Situation ...');
       expect(sys).toContain('## Available Actions');

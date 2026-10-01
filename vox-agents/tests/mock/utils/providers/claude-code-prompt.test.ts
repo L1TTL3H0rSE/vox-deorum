@@ -1,99 +1,62 @@
 /**
- * Tests for the claude-code system-message normalization
- * (`utils/models/providers/claude-code-prompt.ts`). The claude-code provider flattens a prompt keeping only
- * the LAST system message, so these assert the leading system run is merged into one and any later
- * system message is demoted to a user message: `system,system,user,system` becomes
- * `system(1+2),user,user`. A prompt with at most one system message is returned untouched.
+ * Tests for the claude-code system-message demotion
+ * (`utils/models/providers/claude-code-prompt.ts`). The provider sends the whole prompt as one CLI
+ * user turn, so every system message must become a user message in place with no merging:
+ * `system,system,user,system` becomes `user,user,user,user`.
  */
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeClaudeCodeSystemMessages,
+  demoteClaudeCodeSystemMessages,
   claudeCodeSystemMiddleware,
 } from '../../../../src/utils/models/providers/claude-code-prompt.js';
 
-/** A user message in the v3 provider prompt shape (content is an array of parts). */
+/** A user message in the provider prompt shape (content is an array of parts). */
 const user = (text: string) => ({ role: 'user' as const, content: [{ type: 'text' as const, text }] });
-/** A system message in the v3 provider prompt shape (content is a string). */
+/** A system message in the provider prompt shape (content is a string). */
 const system = (content: string) => ({ role: 'system' as const, content });
+/** An assistant message in the provider prompt shape. */
+const assistant = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }] });
 
-describe('normalizeClaudeCodeSystemMessages', () => {
-  it('merges the leading system run and demotes a later system to user (system,system,user,system)', () => {
-    const out = normalizeClaudeCodeSystemMessages([
-      system('S1'),
-      system('S2'),
-      user('U1'),
-      system('S3'),
-    ]);
-    expect(out.map((m) => m.role)).toEqual(['system', 'user', 'user']);
-    // Leading systems merged into one, joined by a blank line.
-    expect(out[0]).toEqual({ role: 'system', content: 'S1\n\nS2' });
-    // Original user message preserved as-is.
-    expect(out[1]).toEqual(user('U1'));
-    // The trailing system is demoted to a user message carrying its text.
-    expect(out[2]).toEqual({ role: 'user', content: [{ type: 'text', text: 'S3' }] });
+describe('demoteClaudeCodeSystemMessages', () => {
+  it('should turn every system message into a user message in place without merging', () => {
+    const out = demoteClaudeCodeSystemMessages([system('S1'), system('S2'), user('U1'), system('S3')]);
+    expect(out).toEqual([user('S1'), user('S2'), user('U1'), user('S3')]);
   });
 
-  it('leaves a single leading system + user body structurally unchanged', () => {
-    const out = normalizeClaudeCodeSystemMessages([system('S1'), user('U1'), user('U2')]);
-    expect(out.map((m) => m.role)).toEqual(['system', 'user', 'user']);
-    expect(out[0]).toEqual({ role: 'system', content: 'S1' });
-    expect(out[1]).toEqual(user('U1'));
-    expect(out[2]).toEqual(user('U2'));
+  it('should keep assistant messages and their order untouched', () => {
+    const out = demoteClaudeCodeSystemMessages([system('S1'), assistant('A1'), system('S2')]);
+    expect(out).toEqual([user('S1'), assistant('A1'), user('S2')]);
   });
 
-  it('returns the same array untouched when there is at most one system message', () => {
-    const leadingOnly = [system('S1'), user('U1')];
-    expect(normalizeClaudeCodeSystemMessages(leadingOnly)).toBe(leadingOnly);
-    // Even a lone TRAILING system message is kept by the provider wherever it sits, so it must
-    // not be demoted to a user message.
-    const trailingOnly = [user('U1'), system('S1')];
-    expect(normalizeClaudeCodeSystemMessages(trailingOnly)).toBe(trailingOnly);
+  it('should return the same array when there is no system message', () => {
+    const input = [user('U1'), assistant('A1')];
+    expect(demoteClaudeCodeSystemMessages(input)).toBe(input);
   });
 
-  it('demotes every post-body system individually (no leading system present)', () => {
-    const out = normalizeClaudeCodeSystemMessages([user('U1'), system('S1'), system('S2')]);
-    expect(out.map((m) => m.role)).toEqual(['user', 'user', 'user']);
-    expect(out[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'S1' }] });
-    expect(out[2]).toEqual({ role: 'user', content: [{ type: 'text', text: 'S2' }] });
-  });
-
-  it('treats an assistant message as ending the leading run (system after assistant is demoted)', () => {
-    const assistant = { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'A1' }] };
-    const out = normalizeClaudeCodeSystemMessages([system('S1'), assistant, system('S2')]);
-    expect(out.map((m) => m.role)).toEqual(['system', 'assistant', 'user']);
-    expect(out[0]).toEqual({ role: 'system', content: 'S1' });
-    expect(out[2]).toEqual({ role: 'user', content: [{ type: 'text', text: 'S2' }] });
-  });
-
-  it('does not mutate the input prompt', () => {
-    const input = [system('S1'), system('S2'), user('U1')];
+  it('should not mutate the input prompt', () => {
+    const input = [system('S1'), user('U1')];
     const snapshot = JSON.stringify(input);
-    normalizeClaudeCodeSystemMessages(input as any);
+    demoteClaudeCodeSystemMessages(input);
     expect(JSON.stringify(input)).toBe(snapshot);
   });
 });
 
 describe('claudeCodeSystemMiddleware', () => {
-  const run = async (prompt: any) => {
+  /** Runs the middleware's transformParams on the given params. */
+  const run = async (params: any) => {
     const mw = claudeCodeSystemMiddleware();
-    return (await (mw.transformParams as any)({ params: { prompt } })).prompt;
+    return (mw.transformParams as any)({ params });
   };
 
-  it('normalizes a prompt carrying more than one system message', async () => {
-    const out = await run([system('S1'), system('S2'), user('U1'), system('S3')]);
-    expect(out.map((m: any) => m.role)).toEqual(['system', 'user', 'user']);
-    expect(out[0].content).toBe('S1\n\nS2');
+  it('should demote system messages in the outgoing prompt', async () => {
+    const out = await run({ prompt: [system('S1'), user('U1')] });
+    expect(out.prompt).toEqual([user('S1'), user('U1')]);
   });
 
-  it('is a no-op (returns params untouched) for an empty prompt or at most one system message', async () => {
-    const mw = claudeCodeSystemMiddleware();
+  it('should return params untouched for an empty prompt or one without system messages', async () => {
     const empty = { prompt: [] };
-    expect(await (mw.transformParams as any)({ params: empty })).toBe(empty);
-
-    const prompt = [system('S1'), user('U1')];
-    const params = { prompt, tools: [] };
-    const out = await (mw.transformParams as any)({ params });
-    // Same reference back: the trivial case avoids rebuilding the prompt.
-    expect(out).toBe(params);
+    expect(await run(empty)).toBe(empty);
+    const params = { prompt: [user('U1')], tools: [] };
+    expect(await run(params)).toBe(params);
   });
 });

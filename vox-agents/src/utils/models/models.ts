@@ -273,11 +273,11 @@ export function getModel(config: Model, options?: {
       middleware: extractReasoningMiddleware({ tagName: config.options.thinkMiddleware })
     });
   }
-  // For claude-code, normalize the prompt's system messages BEFORE they reach the provider, which
-  // otherwise keeps only the LAST system message and drops the rest (main prompt, game situation,
-  // and the tool-rescue-injected schema block). Wrapped here so it lands INNER to the tool
-  // middleware below (AI-SDK middleware transformParams runs outermost-first), letting it run AFTER
-  // tool-rescue injects its instructions so the merged leading system message carries the schemas.
+  // For claude-code, turn every system message into a user message BEFORE it reaches the provider,
+  // which sends the whole prompt as one CLI user turn and never as the CLI system prompt. Wrapped
+  // here so it lands INNER to the tool middleware below (AI-SDK middleware transformParams runs
+  // outermost-first), letting it run AFTER tool-rescue injects its instructions so the injected
+  // schema block is demoted too.
   if (config.provider === 'claude-code') {
     result = wrapLanguageModel({
       model: result,
