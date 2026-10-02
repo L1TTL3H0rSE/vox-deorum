@@ -368,11 +368,12 @@ begin
         // Always delete and update Community Patch and Vox Deorum (required for functionality)
         DelTree(ModsPath + '\(1) Community Patch', True, True, True);
         DelTree(ModsPath + '\(1b) Vox Deorum', True, True, True);
+        DelTree(ModsPath + '\(5) Vox Deorum', True, True, True);
 
         // Copy Community Patch and Vox Deorum mods (always required)
         Exec('xcopy', '/E /I /Y "' + ExpandConstant('{app}\civ5-dll\(1) Community Patch') + '" "' + ModsPath + '\(1) Community Patch"',
             '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-        Exec('xcopy', '/E /I /Y "' + ExpandConstant('{app}\civ5-mod') + '" "' + ModsPath + '\(1b) Vox Deorum"',
+        Exec('xcopy', '/E /I /Y "' + ExpandConstant('{app}\civ5-mod') + '" "' + ModsPath + '\(5) Vox Deorum"',
             '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
         // Copy DLL to Community Patch folder
@@ -450,6 +451,7 @@ begin
       // Remove mod folders
       DelTree(ModsPath + '\(1) Community Patch', True, True, True);
       DelTree(ModsPath + '\(1b) Vox Deorum', True, True, True);
+      DelTree(ModsPath + '\(5) Vox Deorum', True, True, True);
       DelTree(ModsPath + '\(2) Vox Populi', True, True, True);
       DelTree(ModsPath + '\(3a) VP - EUI Compatibility Files', True, True, True);
 

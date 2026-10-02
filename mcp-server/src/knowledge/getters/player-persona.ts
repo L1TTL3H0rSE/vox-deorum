@@ -40,12 +40,12 @@ export async function getPlayerPersona(playerId: number): Promise<Partial<Person
   // Execute the registered Lua function to get persona values
   const result = await readPlayerPersonaFunction().execute(playerId);
 
-  if (!result || !result.success || !result.result) {
-    logger.error(`Failed to read persona for player ${playerId}`);
+  // An empty Lua table can arrive as an array, whose keys would become bogus columns
+  const persona = result?.result;
+  if (!result?.success || !persona || Array.isArray(persona) || Object.keys(persona).length === 0) {
+    logger.error(`Failed to read persona for player ${playerId}`, { raw: persona });
     return null;
   }
-
-  const persona = result.result;
 
   // Store the persona values in the knowledge database with "In-Game AI" rationale
   const store = knowledgeManager.getStore();

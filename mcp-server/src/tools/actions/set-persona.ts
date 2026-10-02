@@ -117,8 +117,10 @@ class SetPersonaTool extends ActionTool<Record<string, number>> {
       const previousPersona = result.Result;
       const lastRationale = (await store.getMutableKnowledge("PersonaChanges", PlayerID))?.Rationale ?? "Unknown";
 
-      // Store the previous persona with reason "In-Game AI"
-      if (previousPersona && Object.keys(previousPersona).length > 0) {
+      // Every persona column is required, so skip history when the previous persona came back
+      // empty (possibly as an array); the next turn-end read records the values instead.
+      if (previousPersona && !Array.isArray(previousPersona) && Object.keys(previousPersona).length > 0) {
+        // Store the previous persona with reason "In-Game AI"
         await store.storeMutableKnowledge(
           'PersonaChanges',
           PlayerID,
@@ -130,25 +132,21 @@ class SetPersonaTool extends ActionTool<Record<string, number>> {
           ["Rationale"], // Only ignore Rationale when checking for changes
           turn
         );
+
+        // Store the new persona values in the database
+        await store.storeMutableKnowledge(
+          'PersonaChanges',
+          PlayerID,
+          {
+            ...previousPersona, // Start with previous values
+            ...filteredPersona, // Override with new values
+            Rationale: Rationale
+          },
+          composeVisibility([PlayerID]),
+          undefined,
+          turn
+        );
       }
-
-      // Store the new persona values in the database
-      const newPersona = {
-        ...previousPersona, // Start with previous values
-        ...filteredPersona  // Override with new values
-      };
-
-      await store.storeMutableKnowledge(
-        'PersonaChanges',
-        PlayerID,
-        {
-          ...newPersona,
-          Rationale: Rationale
-        },
-        composeVisibility([PlayerID]),
-        undefined,
-        turn
-      );
 
       // Compare and send replay messages for actual changes
       const changeDescriptions: string[] = [];

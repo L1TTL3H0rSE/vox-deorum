@@ -447,6 +447,13 @@ export function createSessionRoutes(): Router {
       return;
     }
 
+    // The turn is only known once the MCP server has loaded a game, so skip the call until then
+    if (session.getTurn() === undefined) {
+      const errorResponse: ErrorResponse = { error: 'Game not loaded yet' };
+      res.status(409).json(errorResponse);
+      return;
+    }
+
     try {
       // Get all players from MCP server
       const result = await mcpClient.callTool('get-players', {});

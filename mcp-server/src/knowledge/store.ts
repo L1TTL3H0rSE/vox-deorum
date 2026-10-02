@@ -45,6 +45,19 @@ const renamedEventTypes: Record<string, string> = {
 }
 
 /**
+ * Settles turn-end reads keyed by getter name and logs each rejection, so a failure is visible without blocking the event.
+ */
+async function settleReads(playerId: number, reads: Record<string, Promise<unknown>>): Promise<void> {
+  const entries = Object.entries(reads);
+  const results = await Promise.allSettled(entries.map(([, read]) => read));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      logger.error(`${entries[index][0]} failed for player ${playerId}: ${String(result.reason)}`);
+    }
+  });
+}
+
+/**
  * Foundation for storing and managing AI player knowledge with SQLite persistence
  */
 export class KnowledgeStore {
@@ -323,19 +336,20 @@ export class KnowledgeStore {
             knowledgeManager.updateActivePlayer(data.PlayerID);
           } else if (type === "PlayerDoneTurn") {
             // Store all players' summary info
+            // Settle every read so one failure can't drop the notification below
             if (data.PlayerID === 63) {
-              await Promise.all([
-                getPlayerSummaries(),
-                getCityInformations()
-              ]);
+              await settleReads(data.PlayerID, {
+                getPlayerSummaries: getPlayerSummaries(),
+                getCityInformations: getCityInformations()
+              });
             }
             // Store game data for examination
             if (data.PlayerID < MaxMajorCivs) {
-              await Promise.all([
-                getPlayerOpinions(data.PlayerID),
-                getPlayerStrategy(data.PlayerID),
-                getPlayerPersona(data.PlayerID)
-              ]);
+              await settleReads(data.PlayerID, {
+                getPlayerOpinions: getPlayerOpinions(data.PlayerID),
+                getPlayerStrategy: getPlayerStrategy(data.PlayerID),
+                getPlayerPersona: getPlayerPersona(data.PlayerID)
+              });
             }
             knowledgeManager.updateActivePlayer(data.NextPlayerID);
           }

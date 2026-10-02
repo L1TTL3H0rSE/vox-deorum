@@ -75,4 +75,15 @@ describe('getPlayerPersona', () => {
     // Already prefixed → not wrapped again into "Tweaked by In-Game AI (Tweaked ...".
     expect(latest.Rationale).toBe('Tweaked by In-Game AI (Unknown)');
   });
+
+  it.each([
+    ['an empty table', {}],
+    ['an empty array', []],
+    ['an array of personas', [fullPersona(7)]],
+  ])('returns null for %s without writing a row', async (_label, raw) => {
+    mockLua(raw);
+
+    expect(await getPlayerPersona(1)).toBeNull();
+    expect(await store.getMutableKnowledgeHistory('PersonaChanges', 1)).toHaveLength(0);
+  });
 });

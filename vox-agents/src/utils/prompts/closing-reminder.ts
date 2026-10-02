@@ -9,7 +9,7 @@
 import { formatToolChoiceList } from '../tools/tool-names.js';
 
 /**
- * Builds the single closing reminder appended to a step. Each template line is one sentence and
+ * Builds the single closing reminder appended to a step. Each template line is one part and
  * is left empty when it does not apply; empty lines are dropped and the rest joined with spaces.
  * - Requirement: the step's tool choice is required. It lives here rather than in the provider
  *   middleware's system text, so a step that drops to auto changes only the end of the prompt.
@@ -34,9 +34,9 @@ export function buildClosingReminder(
   const finishing = formatToolChoiceList((completionTools ?? []).filter((name) => allowed.has(name)));
 
   const reminder = `
-${required ? `IMPORTANT: You must issue tool calls to collect information or make actions, as many as you need.` : ''}
+${required ? `IMPORTANT: You must issue tool calls to collect information or make actions. Whenever possible, call all tools you need at once.` : ''}
 ${!narrowed ? '' : tools ? `For this step, you may only call ${tools}; other tools will return an error.` : `No tools are available for this step. Write response in plain text.`}
 ${stepsLeft === undefined ? '' : stepsLeft > 1 ? `IMPORTANT: You must make your final decision within ${stepsLeft} steps.` : `IMPORTANT: This is your last step. Make your final decision now.`}
-${step > 0 && finishing ? `Make sure to call ${finishing} following the EXACT provided format to finalize your decisions.` : ''}`;
+${step > 0 && finishing ? `Finalize your decisions in this response by calling ${finishing} following the EXACT provided format.` : ''}`;
   return reminder.split('\n').filter((line) => line).join(' ') || undefined;
 }

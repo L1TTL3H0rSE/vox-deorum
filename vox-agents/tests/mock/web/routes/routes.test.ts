@@ -876,9 +876,19 @@ describe('session routes', () => {
       expect(res.status).toBe(404);
     });
 
+    it('returns 409 without calling MCP before a game is loaded', async () => {
+      vi.spyOn(sessionRegistry, 'getActive').mockReturnValue({ id: 's1', getTurn: () => undefined } as never);
+      const mcp = installMockMcpClient();
+
+      const res = await request(app).get('/api/session/players-summary');
+
+      expect(res.status).toBe(409);
+      expect(mcp.calls('get-players')).toHaveLength(0);
+    });
+
     it('returns only the major players from the MCP get-players result', async () => {
       vi.spyOn(sessionRegistry, 'getActive').mockReturnValue(
-        { id: 's1', getPlayerAssignments: () => undefined } as never,
+        { id: 's1', getTurn: () => 1, getPlayerAssignments: () => undefined } as never,
       );
       const mcp = installMockMcpClient();
       mcp.respondWith(
@@ -898,7 +908,7 @@ describe('session routes', () => {
     });
 
     it('returns 500 when the MCP call fails', async () => {
-      vi.spyOn(sessionRegistry, 'getActive').mockReturnValue({ id: 's1' } as never);
+      vi.spyOn(sessionRegistry, 'getActive').mockReturnValue({ id: 's1', getTurn: () => 1 } as never);
       const mcp = installMockMcpClient();
       mcp.failWith('get-players', new Error('mcp down'));
 

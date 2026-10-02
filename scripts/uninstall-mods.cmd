@@ -17,6 +17,10 @@ if exist "%MODS_DIR%\(1b) Vox Deorum" (
     rmdir /S /Q "%MODS_DIR%\(1b) Vox Deorum" 2>nul
 )
 
+if exist "%MODS_DIR%\(5) Vox Deorum" (
+    rmdir /S /Q "%MODS_DIR%\(5) Vox Deorum" 2>nul
+)
+
 if exist "%MODS_DIR%\(2) Vox Populi" (
     rmdir /S /Q "%MODS_DIR%\(2) Vox Populi" 2>nul
 )

@@ -18,7 +18,7 @@ REM Get the actual Documents folder path using PowerShell
 for /f "usebackq tokens=*" %%i in (`powershell -Command "[Environment]::GetFolderPath('MyDocuments')"`) do set "DOCUMENTS=%%i"
 
 REM Construct the destination path
-set "DEST_DIR=%DOCUMENTS%\My Games\Sid Meier's Civilization 5\MODS\(1b) Vox Deorum"
+set "DEST_DIR=%DOCUMENTS%\My Games\Sid Meier's Civilization 5\MODS\(5) Vox Deorum"
 set "SOURCE_DIR=%~dp0"
 
 REM Remove trailing backslash from SOURCE_DIR if present
@@ -37,6 +37,9 @@ if not exist "%DEST_DIR%" (
         exit /b 1
     )
 )
+
+REM Remove the legacy (1b) folder name from previous installs
+if exist "%DOCUMENTS%\My Games\Sid Meier's Civilization 5\MODS\(1b) Vox Deorum" rmdir /S /Q "%DOCUMENTS%\My Games\Sid Meier's Civilization 5\MODS\(1b) Vox Deorum"
 
 echo Copying mod files...
 echo.

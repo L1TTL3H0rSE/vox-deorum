@@ -7,7 +7,9 @@ This folder is the in-game companion mod "(5) Vox Deorum" for Civilization V. It
 **Every time a task is complete, run `deploy.bat`** (from this folder). It:
 
 1. Runs `update_md5.py` to refresh the MD5 hashes in `VoxDeorum.modinfo` (aborts deployment if this fails)
-2. Copies the mod into `Documents\My Games\Sid Meier's Civilization 5\MODS\(1b) Vox Deorum`
+2. Copies the mod into `Documents\My Games\Sid Meier's Civilization 5\MODS\(5) Vox Deorum`
+
+The game loads mods alphabetically by folder name, so the folder must sort after (3a) for our LeaderHeadRoot override to win.
 
 Never hand-edit the `md5` attributes in the modinfo - `update_md5.py` owns them.
 

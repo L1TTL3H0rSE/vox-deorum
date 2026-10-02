@@ -84,7 +84,7 @@ Here is one request on step 2 of a strategist run, top to bottom, for a provider
 └─────────────────────────────────────────────┘
 ```
 
-The closing reminder is always the last message. It comes after any rescue message, so the model reads "your last reply was empty, try again" and then "here is what you may call and how to finish".
+The closing reminder is always the last message. It comes after any rescue message, so the model reads "your last reply was empty, try again" and then "here is what you may call and how to finish". Required steps ask for all independent tool calls together in one response; continuation steps ask for a finishing call in the current response.
 
 In prompt mode the tool block disappears from the wire. Its content moves into the text, as described in [Prompt-mode tool calling](#prompt-mode-tool-calling).
 

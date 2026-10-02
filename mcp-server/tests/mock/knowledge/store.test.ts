@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { setupStore } from '../helpers.js';
 import { knowledgeManager, gameDatabase, MCPServer } from '../../../src/server.js';
 import { composeVisibility } from '../../../src/utils/knowledge/visibility.js';
+import { LuaFunction } from '../../../src/bridge/lua-function.js';
 import type { KnowledgeStore } from '../../../src/knowledge/store.js';
 
 let store: KnowledgeStore;
@@ -205,4 +206,15 @@ describe('handleGameEvent', () => {
     expect(await store.getDatabase().selectFrom('GameEvents').selectAll().execute()).toHaveLength(0);
     expect(notifySpy).not.toHaveBeenCalled();
   });
+
+  it('still advances the active player and notifies when a turn-end read fails', async () => {
+    vi.spyOn(LuaFunction.prototype, 'execute').mockRejectedValue(new Error('bridge down'));
+    const activeSpy = vi.spyOn(knowledgeManager, 'updateActivePlayer');
+
+    await store.handleGameEvent(10_000_020, 'PlayerDoneTurn', { PlayerID: 1, NextPlayerID: 2 });
+
+    expect(activeSpy).toHaveBeenCalledWith(2);
+    expect(notifySpy).toHaveBeenCalledWith('PlayerDoneTurn', 1, 10, 10_000_020, expect.any(Object));
+  });
 });
+

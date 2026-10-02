@@ -357,7 +357,8 @@ echo.
 echo [7/10] Installing Vox Populi Community Patch...
 set "VP_INSTALLED=0"
 set "CP_PATH=%MODS_DIR%\(1) Community Patch"
-set "VD_PATH=%MODS_DIR%\(1b) Vox Deorum"
+set "VD_PATH=%MODS_DIR%\(5) Vox Deorum"
+set "LEGACY_VD_PATH=%MODS_DIR%\(1b) Vox Deorum"
 set "VP_PATH=%MODS_DIR%\(2) Vox Populi"
 set "EUI_PATH=%MODS_DIR%\(3a) VP - EUI Compatibility Files"
 
@@ -390,6 +391,7 @@ if "%VP_INSTALLED%"=="0" (
         :: Delete existing mod folders first (similar to robocopy /mir), but continue even if deletion fails
         if exist "!CP_PATH!" rmdir /S /Q "!CP_PATH!" 2>nul
         if exist "!VD_PATH!" rmdir /S /Q "!VD_PATH!" 2>nul
+        if exist "!LEGACY_VD_PATH!" rmdir /S /Q "!LEGACY_VD_PATH!" 2>nul
         if exist "!VP_PATH!" rmdir /S /Q "!VP_PATH!" 2>nul
         if exist "!EUI_PATH!" rmdir /S /Q "!EUI_PATH!" 2>nul
 
@@ -418,7 +420,7 @@ if "%VP_INSTALLED%"=="0" (
 
         :: Copy Vox Deorum mod
         if exist "!SOURCE_VD!" (
-            echo   Copying ^(1b^) Vox Deorum...
+            echo   Copying ^(5^) Vox Deorum...
             xcopy /E /I /Y "!SOURCE_VD!" "!VD_PATH!" >nul 2>&1
             :: Don't copy .bat files
             del "!VD_PATH!\*.bat" >nul 2>&1
@@ -446,7 +448,7 @@ if "%VP_INSTALLED%"=="0" (
         echo   Expected at: !SOURCE_CP!
         echo   Please manually copy:
         echo     - ^(1^) Community Patch folder to !CP_PATH!
-        echo     - ^(1b^) Vox Deorum folder to !VD_PATH!
+        echo     - ^(5^) Vox Deorum folder to !VD_PATH!
         echo     - ^(2^) Vox Populi folder to !VP_PATH!
         echo     - ^(3a^) EUI Compatibility Files folder to !EUI_PATH!
         echo     - CvGameCore_Expansion2.dll to !CP_PATH!\

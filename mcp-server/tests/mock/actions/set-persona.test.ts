@@ -43,7 +43,7 @@ function fullPersona(overrides: Record<string, number> = {}, base = 5): Record<s
 }
 
 /** Stub the Lua boundary so super.call() returns a canned (complete) "previous persona". */
-function mockLua(previousPersona: Record<string, number>) {
+function mockLua(previousPersona: unknown) {
   vi.spyOn(LuaFunction.prototype, 'execute').mockResolvedValue({
     success: true,
     result: previousPersona,
@@ -118,5 +118,15 @@ describe('set-persona', () => {
     expect(result.Success).toBe(false);
     expect(await store.getMutableKnowledgeHistory('PersonaChanges', 0)).toHaveLength(0);
     expect(pushSpy).not.toHaveBeenCalled();
+  });
+
+  it('still applies the change when the previous persona comes back empty', async () => {
+    mockLua([]);
+
+    const result = await tool.execute({ PlayerID: 0, Boldness: 8, Rationale: 'r' } as any);
+    expect(result.Success).toBe(true);
+    // Without a complete previous persona no history row can be written.
+    expect(await store.getMutableKnowledgeHistory('PersonaChanges', 0)).toHaveLength(0);
+    expect(pushSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,7 +34,7 @@ Loading follows the standard Civ V mod lifecycle, declared entirely in `VoxDeoru
 2. On activation, `OnModActivated` runs four `UpdateDatabase` scripts in order: `SQL/VoxDeorum_Options.sql`, `Text/VoxDeorum_Text.xml`, `Text/VoxDeorum_Text.sql`, and `XML/VoxDeorum_Notifications.xml`. This is the moment `IPC_CHANNEL` and the `EVENTS_*` options get set, so the connection service comes alive when the game starts.
 3. At game start the six entry points take effect: the map script generates the world, and five `InGameUIAddin` entries load into the UI runtime. Four of them point at an `.xml` context (the human panel, the human trigger, the diplomacy panel, and the deal screen), which in turn pulls in its Lua. `VoxDeorumTest.lua` is a standalone Lua addin with no XML.
 
-The mod is marked as affecting saved games and supports single-player, multiplayer, and hot-seat. Each shipped file carries an MD5 in the `.modinfo`. After edits, `update_md5.py` recomputes those hashes and `deploy.bat` copies the mod into the local Civilization V `MODS` directory (as `(1b) Vox Deorum`) for testing.
+The mod is marked as affecting saved games and supports single-player, multiplayer, and hot-seat. Each shipped file carries an MD5 in the `.modinfo`. After edits, `update_md5.py` recomputes those hashes and `deploy.bat` copies the mod into the local Civilization V `MODS` directory (as `(5) Vox Deorum`) for testing. The game loads mods alphabetically by folder name, so the folder must sort after (3a) for our LeaderHeadRoot override to win.
 
 ## Where to start reading
 
