@@ -219,7 +219,9 @@ Keep the failed step's logical span open across the retry and replace only its `
 
 ## Thresholds, reminders, and reasoning
 
-Add `LLMConfig.options.continuityThreshold`. The default is 100,000 tokens. The helper validates a positive finite number and otherwise uses the default with a warning.
+Add `LLMConfig.options.continuityThreshold`. The default is 300,000 tokens for Claude Code, Codex, OpenAI, and Anthropic models and 100,000 otherwise. The helper validates a positive finite number and otherwise uses the default with a warning.
+
+Already landed with Step 6 of `docs/plans/just-bash-workspace.md` (single-run compaction with files on): the option and `continuityThreshold(model)` in `src/utils/models/models.ts`; `countRequestTokens()` in `src/utils/models/token-counter.ts`, which plays the role of `estimateContextTokens()` below; and `compactWorkspaceTraffic()` and `dropOlderReasoning()` in `src/utils/prompts/message-history.ts`. Cross-round compaction should reuse these rather than add parallel helpers.
 
 Provider `inputTokens` remains the request-usage authority, including cache reads and writes, but does not measure the next round. Commit estimates `historyTokens` from sanitized history, including the final assistant response. `estimateContextTokens()` in `src/utils/models/token-counter.ts` counts text, reasoning, tool names and inputs, and serialized tool results. Use it only for committed-history thresholds and test large results.
 

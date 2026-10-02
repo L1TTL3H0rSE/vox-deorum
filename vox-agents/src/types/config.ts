@@ -62,6 +62,12 @@ export interface LLMConfig {
      * to reproduce a recorded turn's framing on any replay model. See `resolveToolFraming`.
      */
     framing?: ToolCallFraming;
+    /**
+     * Estimated request size, in tokens, at which a run with the seat `files` setting on drops old
+     * bash output. Defaults to 300,000 for Claude Code, Codex, OpenAI, and Anthropic models and
+     * 100,000 otherwise. See `continuityThreshold`.
+     */
+    continuityThreshold?: number;
     /** When set, marks this model as an embedding model; value is the target embedding dimension */
     embeddingSize?: number;
     [key: string]: any;

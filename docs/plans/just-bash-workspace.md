@@ -1,6 +1,6 @@
 # just-bash workspace for all agents
 
-This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 5 done, including the Node 22.23.3 requirement, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
+This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 6 done, including the Node 22.23.3 requirement, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
 
 ## Context
 
@@ -37,7 +37,7 @@ One setting, `files`, resolved like `triage`: seat (`llmPlayers.<n>.files`), els
 }
 ```
 
-The size threshold for compaction is a model option, `options.continuityThreshold` (default 100,000 tokens), the same name the sibling plan `docs/plans/context-continuity.md` defines, so both plans share one knob.
+The size threshold for compaction is a model option, `options.continuityThreshold` (default 300,000 tokens for Claude Code, Codex, OpenAI, and Anthropic models, 100,000 otherwise), the same name the sibling plan `docs/plans/context-continuity.md` defines, so both plans share one knob.
 
 Virtual layout seen by the agent (cwd `/workspace`):
 
@@ -179,11 +179,11 @@ With `files` on, one step budget covers workspace work and the final decision. W
   - With files on, `executeAgentStep` passes `stepsLeft = stepLimit - steps so far` to `continuationNudge`, and the closing reminder template (`buildClosingReminder` in `utils/prompts/closing-reminder.ts`) adds a steps-left line on every step, or a last-step line at 1.
 - Tests: `tests/mock/context/vox-execute-step-budget.test.ts` (quota raises the limit, a higher `maxSteps` wins, no change without files, countdown per step, bash declared only with files, an empty list stays empty, Briefer ignores text next to bash).
 
-### 6. Auto compaction within a run
+### 6. Auto compaction within a run (done)
 
 Pulled from the sibling plan `docs/plans/context-continuity.md` (threshold, 75 percent reminder, one overflow retry, older-reasoning removal), scoped to a single run because that plan's carried history does not exist yet. Only runs with `files` compact; others keep today's overflow behavior. Workspace notes are what make dropping old output safe.
 
-- `utils/models/models.ts` (or a small `utils/models/thresholds.ts`): `continuityThreshold(model)` reads `options.continuityThreshold`, default 100,000, warns and falls back on a non-positive or non-finite value. Add the option to `LLMConfig` with a doc comment.
+- `utils/models/models.ts` (or a small `utils/models/thresholds.ts`): `continuityThreshold(model)` reads `options.continuityThreshold`, default 300,000 for Claude Code, Codex, OpenAI, and Anthropic models (including Claude on Vertex and `anthropic/` or `openai/` names on routers) and 100,000 otherwise, warns and falls back on a non-positive or non-finite value. Add the option to `LLMConfig` with a doc comment.
 - `utils/models/token-counter.ts`: add `countRequestTokens(messages)` for compaction decisions. Include text, tool names and inputs, serialized tool-result outputs (including errors), retained reasoning, and message overhead. Keep the existing reasoning-only and visible-output counters used by telemetry unchanged. This remains a local estimate, not an exact provider token count.
 - New `utils/prompts/message-history.ts` (the module the sibling plan names), pure functions on copies:
   - `compactWorkspaceTraffic(messages, keepFrom)`: replaces the output of every `bash` tool result before index `keepFrom` with a short stub saying the output was dropped and to re-run the command or read notes. Calls stay, so call/result pairs remain valid. Messages before the cache anchor and all non-bash traffic are untouched, so the cached prefix still hits.
@@ -191,8 +191,8 @@ Pulled from the sibling plan `docs/plans/context-continuity.md` (threshold, 75 p
 - `executeAgentStep` / the loop in `executeAgent`, with `files` on:
   - Before each step after the first, estimate the request with `countRequestTokens(messages)`.
   - At 75 percent of the threshold, append one reminder per run: save anything you still need to the workspace, because older output will be dropped.
-  - At the threshold, apply both functions with `keepFrom` at the start of the last step's response, and record `step.compacted = 'threshold'`.
-  - On the first `isContextLengthError` from a step, compact the same way and retry that step once (`step.compacted = 'overflow'` on the retry). A second overflow in the run falls through to today's handling (`onContextLengthError`, `throwOnError`).
+  - At the threshold, apply both functions with `keepFrom` at the start of the last step's response, and record `step.compacted = 'threshold'`. Compaction waits until a step after the reminder, so a step that jumps straight past the threshold is reminded first. Bash output and reasoning in the run's initial messages are never touched.
+  - On the first `isContextLengthError` from a step, compact the same way and retry that step once inside the same step span, reusing its prepared configuration (`step.compacted = 'overflow'`, and `step.messages` becomes the retried request). This emergency path does not wait for the reminder. A second overflow in the run falls through to today's handling (`onContextLengthError`, `throwOnError`).
 - `utils/retry.ts` already stops retrying on context-length errors, so the generic retry needs no change.
 - During implementation, add a short note to `docs/plans/context-continuity.md` that these helpers and the option now exist and its cross-round compaction should reuse them.
 

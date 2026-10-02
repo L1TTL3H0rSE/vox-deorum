@@ -123,12 +123,13 @@ model reply: [ get-briefing(...), send-message(...) ]
 
 ## Reminders
 
-Two reminders are added during a run. Both go through `appendReminder` (`utils/prompts/reminders.ts`), which appends a user message and skips it when the same text is already the last message.
+Three reminders are added during a run. All go through `appendReminder` (`utils/prompts/reminders.ts`), which appends a user message and skips it when the same text is already the last message.
 
 | Reminder | Added by | When | Built in |
 | --- | --- | --- | --- |
 | Empty-reply rescue | `VoxAgent.prepareStep` (`infra/vox-agent.ts`) | The last step made no tool call when one was required, or replied with nothing at all | `buildRescuePrompt` (`utils/models/text-cleaning.ts`) |
 | Closing reminder | `executeAgentStep` (`infra/vox-execute.ts`), from `VoxAgent.continuationNudge` | Every step where it has content | `buildClosingReminder` (`utils/prompts/closing-reminder.ts`) |
+| Compaction reminder | `executeAgent` (`infra/vox-execute.ts`), kept in the run history | Once per run with files on, when a request reaches 75 percent of the model's `continuityThreshold`; threshold compaction waits until a step after it | `compactionReminder` (`utils/prompts/message-history.ts`) |
 
 The closing reminder is one template in `buildClosingReminder`, one line per sentence. Lines that do not apply are dropped and the rest are joined with spaces, in this order:
 

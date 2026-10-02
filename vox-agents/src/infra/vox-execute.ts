@@ -18,7 +18,8 @@ import type { AgentParameters, PreparedAgentState, TriageDecision, VoxAgent } fr
 import type { VoxContext } from "./vox-context.js";
 import type { Model, StreamingEventCallback } from "../types/index.js";
 import { streamTextWithConcurrency, withModelConfig } from "../utils/models/concurrency.js";
-import { getModel, buildProviderOptions } from "../utils/models/models.js";
+import { getModel, buildProviderOptions, continuityThreshold } from "../utils/models/models.js";
+import { countRequestTokens } from "../utils/models/token-counter.js";
 import { formatModelReference } from '../utils/models/model-reference.js';
 import { emitProviderExecutedToolSpans } from "../utils/telemetry/provider-tool-spans.js";
 import { hostCapabilityTelemetryAttributes } from "../utils/telemetry/host-capabilities.js";
@@ -27,6 +28,7 @@ import { stepTokenUsage } from "../utils/telemetry/model-usage.js";
 import { isHostCapabilityProvider } from "../utils/models/providers/host-tools.js";
 import { stripMarkdownConfig, stripToolArtifacts } from "../utils/models/text-cleaning.js";
 import { appendReminder } from "../utils/prompts/reminders.js";
+import { compactWorkspaceTraffic, compactionReminder, dropOlderReasoning } from "../utils/prompts/message-history.js";
 import { buildRemovedToolRejections } from "../utils/tools/tool-availability.js";
 import { isContextLengthError } from "../utils/retry.js";
 import { agentRegistry } from "./agent-registry.js";
@@ -139,6 +141,7 @@ export async function executeAgent<TParameters extends AgentParameters>(
         }];
 
         messages.push(...prepared.messages);
+        const initialLength = messages.length;
         const allSteps: StepResult<ToolSet>[] = [];
         let finalText = "";
 
@@ -150,6 +153,13 @@ export async function executeAgent<TParameters extends AgentParameters>(
         let outputTokens = 0;
         // Threads the previous Codex step's response id so the next step prefers native thread continuation.
         let codexResponseId: string | undefined;
+        // With files on, the run compacts old bash output near this request size. Workspace notes
+        // are what make dropping that output safe, so runs without files never compact.
+        const threshold = host.files ? continuityThreshold(modelConfig) : undefined;
+        // Where the last step's response starts; its bash output survives compaction.
+        let lastResponseStart: number | undefined;
+        let compactionReminded = false;
+        let overflowRetried = false;
 
         // Execute steps in a loop, one at a time
         for (let stepCount = 0; !shouldStop; stepCount++) {
@@ -157,6 +167,29 @@ export async function executeAgent<TParameters extends AgentParameters>(
             GameID: params.gameID,
             PlayerID: params.playerID
           });
+
+          // Before each later step, remind once from 75 percent of the threshold, and compact at the
+          // threshold only after the reminder had a step to act on, so old output never drops unwarned.
+          let compacted: StepCompaction | undefined;
+          let compactOnOverflow: ((stepMessages: ModelMessage[]) => ModelMessage[]) | undefined;
+          if (threshold !== undefined && lastResponseStart !== undefined) {
+            const keepFrom = lastResponseStart;
+            const requestTokens = countRequestTokens(messages);
+            if (!compactionReminded) {
+              if (requestTokens >= threshold * 0.75) {
+                messages = appendReminder(messages, compactionReminder);
+                compactionReminded = true;
+              }
+            } else if (requestTokens >= threshold) {
+              messages = compactHistory(messages, keepFrom, initialLength);
+              compacted = 'threshold';
+            }
+            // The first context overflow compacts and retries the step once. A step that already
+            // compacted would resend the same request, so it fails as before.
+            if (!compacted && !overflowRetried) {
+              compactOnOverflow = (stepMessages) => compactHistory(stepMessages, keepFrom, initialLength);
+            }
+          }
 
           // Execute the step with proper tracing
           const stepResult = await executeAgentStep(
@@ -169,11 +202,15 @@ export async function executeAgent<TParameters extends AgentParameters>(
             messages,
             prepared.tools,
             modelConfig,
-            codexResponseId,
-            callback
+            // A compacted history must reach the model in full, not continue Codex's native thread.
+            compacted ? undefined : codexResponseId,
+            callback,
+            compacted,
+            compactOnOverflow
           );
 
           // Update state from step results
+          if (stepResult.compacted === 'overflow') overflowRetried = true;
           messages = stepResult.messages;
           shouldStop = stepResult.shouldStop;
           finalText = stepResult.finalText ?? "";
@@ -185,6 +222,7 @@ export async function executeAgent<TParameters extends AgentParameters>(
           reasoningTokens += stepResult.reasoningTokens;
           outputTokens += stepResult.outputTokens;
           codexResponseId = stepResult.responseId;
+          lastResponseStart = stepResult.responseStart;
         }
 
         host.logger.info(`Agent execution completed: ${agentName} with ${allSteps.length} steps`);
@@ -251,6 +289,17 @@ async function resolveTriage<TParameters extends AgentParameters>(
   }
 }
 
+/** Why a step's history was compacted before it ran. */
+type StepCompaction = 'threshold' | 'overflow';
+
+/**
+ * Drops old bash output before `keepFrom` and reasoning from older assistant messages, both only
+ * after the run's initial messages, so the initial prompt stays byte-identical for prompt caching.
+ */
+function compactHistory(messages: ModelMessage[], keepFrom: number, initialLength: number): ModelMessage[] {
+  return dropOlderReasoning(compactWorkspaceTraffic(messages, keepFrom, initialLength), initialLength);
+}
+
 /**
  * Execute a single agent step with proper tracing and error handling. This function encapsulates
  * the logic for preparing, executing, and processing a single step in an agent's execution flow.
@@ -266,7 +315,11 @@ async function resolveTriage<TParameters extends AgentParameters>(
  * @param model - The model identifier
  * @param previousResponseId - The prior Codex step's response id, forwarded so the proxy continues the same thread
  * @param callback - Optional streaming event callback for this step
- * @returns Updated messages, stop condition, optional final text, and the response id that continues the thread
+ * @param compacted - Why the history was compacted before this step, recorded as step.compacted
+ * @param compactOnOverflow - When set, the first context-length error compacts the prepared request
+ *   with it and retries once inside this step, so the rejected request is not another logical step
+ * @returns Updated messages, where this step's response starts in them, stop condition, optional
+ *   final text, the response id that continues the thread, and why the step's history was compacted
  */
 async function executeAgentStep<TParameters extends AgentParameters>(
   host: VoxContext<TParameters>,
@@ -279,8 +332,10 @@ async function executeAgentStep<TParameters extends AgentParameters>(
   declaredTools: string[] | undefined,
   model: Model,
   previousResponseId?: string,
-  callback?: StreamingEventCallback
-): Promise<{ messages: ModelMessage[], shouldStop: boolean, finalText?: string, inputTokens: number, cachedInputTokens?: number, reasoningTokens: number, outputTokens: number, responseId?: string }> {
+  callback?: StreamingEventCallback,
+  compacted?: StepCompaction,
+  compactOnOverflow?: (messages: ModelMessage[]) => ModelMessage[]
+): Promise<{ messages: ModelMessage[], responseStart: number, shouldStop: boolean, finalText?: string, inputTokens: number, cachedInputTokens?: number, reasoningTokens: number, outputTokens: number, responseId?: string, compacted?: StepCompaction }> {
   const stepSpan = openStepSpan(host, agent.name, parameters.turn, stepCount + 1);
 
   return await context.with(trace.setSpan(context.active(), stepSpan), async () => {
@@ -292,7 +347,6 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       // Apply prepared configuration
       messages = stepConfig.messages || messages;
       const stepModel = stepConfig.model || model;
-      const stepProviderOptions = buildProviderOptions(stepModel, previousResponseId);
       // The run's tools stay declared on every step (undefined means "all registered tools", the AI
       // SDK's activeTools contract), so narrowing never changes the cached prompt prefix. Tools that
       // prepareStep removes after a step are enforced once the model replies: each gets a rejection
@@ -335,6 +389,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
         'step.tools.choice': stepToolChoice,
         'step.messages': JSON.stringify(messages),
       });
+      if (compacted) stepSpan.setAttribute('step.compacted', compacted);
       // Recorded separately: host-tool validation may throw, and the step
       // configuration above should already be on the span when it does.
       stepSpan.setAttributes(hostCapabilityTelemetryAttributes(stepModel));
@@ -348,7 +403,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
 
       // Execute a single step with concurrency limiting and retry
       // The steps are already awaited within the retry mechanism to properly catch streaming errors
-      const result = await streamTextWithConcurrency(
+      const request = (requestMessages: ModelMessage[], responseId: string | undefined) => streamTextWithConcurrency(
         withModelConfig({
           // Model settings
           model: getModel(stepModel, {
@@ -360,14 +415,14 @@ async function executeAgentStep<TParameters extends AgentParameters>(
             // narrowed steps; the closing reminder names what may actually run.
             completionTools: agent.completionTools,
           }),
-          providerOptions: stepProviderOptions,
+          providerOptions: buildProviderOptions(stepModel, responseId),
           // Disable Vercel AI SDK's internal retry to let our wrapper handle it
           maxRetries: 0,
           // Abort signal for cancellation: the active root's signal, so aborting one root
           // never stops a sibling root's step.
           abortSignal: host.currentSignal(),
           // Current messages
-          messages: messages,
+          messages: requestMessages,
           // Tools
           tools: host.tools,
           activeTools: declaredTools,
@@ -392,6 +447,19 @@ async function executeAgentStep<TParameters extends AgentParameters>(
         }, stepModel),
         host
       );
+      let result: Awaited<ReturnType<typeof request>>;
+      try {
+        result = await request(messages, previousResponseId);
+      } catch (error) {
+        if (!compactOnOverflow || host.currentSignal().aborted || !isContextLengthError(error)) throw error;
+        // Same prepared configuration, compacted history, and a fresh Codex thread; the span's
+        // snapshot becomes the request that was actually retried.
+        host.logger.warn(`Context length exceeded for ${agent.name} at step ${stepCount + 1}; compacting and retrying once.`);
+        messages = compactOnOverflow(messages);
+        compacted = 'overflow';
+        stepSpan.setAttributes({ 'step.messages': JSON.stringify(messages), 'step.compacted': compacted });
+        result = await request(messages, undefined);
+      }
 
       if (!result || host.currentSignal().aborted) throw new Error("Operation aborted.");
       // Steps are already resolved by streamTextWithConcurrency
@@ -432,6 +500,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       // Add the step to our collection
       let shouldStop = false;
       let finalText: string | undefined;
+      const responseStart = messages.length;
 
       if (stepResults.length > 0) {
         allSteps.push(...stepResults);
@@ -469,7 +538,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       stepSpan.setAttribute('step.should_stop', shouldStop);
       stepSpan.setStatus({ code: SpanStatusCode.OK });
 
-      return { messages, shouldStop, finalText, inputTokens, cachedInputTokens, reasoningTokens, outputTokens, responseId };
+      return { messages, responseStart, shouldStop, finalText, inputTokens, cachedInputTokens, reasoningTokens, outputTokens, responseId, compacted };
     } catch (error) {
       recordSpanError(stepSpan, error);
       throw error; // Re-throw to be handled by outer try-catch

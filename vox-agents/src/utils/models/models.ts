@@ -47,6 +47,36 @@ const warnedUnknownIds = new Set<string>();
 /** Model-resolution diagnostics without configuration values or credentials. */
 const modelsLogger = createLogger('models');
 
+/** Default compaction threshold, in estimated request tokens, for most models. */
+export const defaultContinuityThreshold = 100_000;
+
+/** Default compaction threshold for Claude Code, Codex, OpenAI, and Anthropic models. */
+export const largeContinuityThreshold = 300_000;
+
+/** Providers whose models get the large default threshold. */
+const largeContextProviders = new Set(['claude-code', 'codex', 'openai', 'anthropic']);
+
+/**
+ * The estimated request size, in tokens, at which a run compacts its history. Reads
+ * `options.continuityThreshold`. The default is 300,000 for Claude Code, Codex, OpenAI, and
+ * Anthropic models (including Claude on Vertex and `anthropic/` or `openai/` names on routers),
+ * and 100,000 otherwise. A non-positive or non-finite value warns and falls back to the default.
+ */
+export function continuityThreshold(model: Model): number {
+  const name = model.name.toLowerCase();
+  const fallback = largeContextProviders.has(model.provider) || name.startsWith('claude-')
+    || name.startsWith('anthropic/') || name.startsWith('openai/')
+    ? largeContinuityThreshold
+    : defaultContinuityThreshold;
+  const value = model.options?.continuityThreshold;
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    modelsLogger.warn(`Invalid continuityThreshold ${String(value)} for ${model.provider}/${model.name}; using ${fallback}.`);
+    return fallback;
+  }
+  return value;
+}
+
 /** Applies the caller's reasoning override to an explicit or synthesized model configuration. */
 function applyReasoning(model: Model, reasoning?: ReasoningEffort | 'default'): Model {
   if (!reasoning || (reasoning === 'default' && model.options?.reasoningEffort)) return model;

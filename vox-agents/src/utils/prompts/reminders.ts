@@ -1,11 +1,13 @@
 /**
  * @module utils/prompts/reminders
  *
- * The single place that owns how a mid-run reminder is attached to a conversation. Two sites inject
- * one: the empty-response rescue (`VoxAgent.prepareStep`, which rewrites the message list) and the
+ * The single place that owns how a mid-run reminder is attached to a conversation. Three sites inject
+ * one: the empty-response rescue (`VoxAgent.prepareStep`, which rewrites the message list), the
  * closing reminder (`executeAgentStep` in infra/vox-execute.ts, which runs after the step's executable
- * tools are resolved and carries both the narrowed-tool policy and the finalize nudge). Both must follow the same "never repeat the reminder that is already last" policy, so
- * it lives here rather than being restated at each site.
+ * tools are resolved and carries both the narrowed-tool policy and the finalize nudge), and the
+ * compaction reminder (`executeAgent`, once per run with files on). All must follow the same "never
+ * repeat the reminder that is already last" policy, so it lives here rather than being restated at
+ * each site.
  */
 
 import type { ModelMessage } from "ai";

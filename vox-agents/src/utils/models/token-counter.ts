@@ -78,6 +78,40 @@ export function countMessageTokens(message: ModelMessage, reasoningOnly: boolean
 }
 
 /**
+ * Estimate the size of a whole request for compaction decisions. Unlike the telemetry counters,
+ * this includes tool results (outputs and errors) and retained reasoning, plus a fixed overhead
+ * per message. All text is joined and encoded once, so a long history costs one encoder pass.
+ * A local estimate, not the provider's exact count.
+ * @param messages - The request messages
+ * @returns The estimated number of tokens
+ */
+export function countRequestTokens(messages: ModelMessage[]): number {
+  const pieces: string[] = [];
+  for (const message of messages) {
+    if (typeof message.content === 'string') {
+      pieces.push(message.content);
+      continue;
+    }
+    for (const part of message.content) {
+      switch (part.type) {
+        case 'text':
+        case 'reasoning':
+          pieces.push(part.text);
+          break;
+        case 'tool-call':
+          pieces.push(part.toolName, JSON.stringify(part.input ?? null));
+          break;
+        case 'tool-result':
+          pieces.push(part.toolName, JSON.stringify(part.output ?? null));
+          break;
+      }
+    }
+  }
+  // Role and separator tokens, as in countMessageTokens.
+  return countTokens(pieces.join('\n')) + messages.length * 4;
+}
+
+/**
  * Count tokens in a list of messages
  * @param messages - The messages to count tokens for
  * @returns The total number of tokens
