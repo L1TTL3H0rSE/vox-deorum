@@ -15,6 +15,7 @@ Common problems and how to fix them, in the order you'll meet them. If your issu
 | Game crashed or connection lost mid-game | Vox Deorum reconnects and relaunches on its own; wait it out; see below. |
 | Spokesperson chat doesn't reply | Confirm your credential works and the game is running; check the console for errors. |
 | Responses are slow or costly | Switch to a smaller, faster, or local model. |
+| Need to report a bug | Download logs from the dashboard's **Debug** page; see below. |
 
 ## The installer couldn't find Civilization V
 
@@ -67,3 +68,15 @@ Replies stream from the model, so expect a short delay. Confirm your API key is 
 ## Responses are slow, or the game costs more than expected
 
 A smaller, faster, or local model helps both, as does having the AI control fewer civilizations. See [Configuration: Controlling cost](configuration.md#controlling-cost).
+
+## Collecting logs for a bug report
+
+The dashboard's **Debug** page collects the logs that help us diagnose a problem:
+
+1. Open the dashboard and select **Debug**.
+2. Turn on the **Civ 5 logging** switch, then restart Civ 5. The game reads this setting only when it starts.
+3. Reproduce the problem in the game.
+4. Click **Download all** to save a zip containing the latest Vox Deorum and Civ 5 log files plus a short setup summary.
+5. Attach the zip to a [GitHub issue](https://github.com/CIVITAS-John/vox-deorum/issues).
+
+The zip never includes your API keys or configuration files, so it is safe to share.

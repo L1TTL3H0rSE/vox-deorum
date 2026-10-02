@@ -12,8 +12,8 @@ import path from 'path';
 import fs from 'fs';
 import { sseManager } from '../web/sse-manager.js';
 
-// Ensure logs directory exists
-const logsDir = path.join(process.cwd(), 'logs');
+/** Folder holding this service's rotated log files. Created on startup if missing. */
+export const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }

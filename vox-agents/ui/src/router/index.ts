@@ -37,9 +37,13 @@ const router = createRouter({
       component: () => import('../views/TelemetryTraceView.vue')
     },
     {
+      path: '/debug',
+      name: 'debug',
+      component: () => import('../views/DebugView.vue')
+    },
+    {
       path: '/logs',
-      name: 'logs',
-      component: () => import('../components/logging/LogViewer.vue')
+      redirect: '/debug'
     },
     {
       path: '/session',

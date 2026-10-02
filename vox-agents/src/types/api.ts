@@ -652,3 +652,58 @@ export interface PlayerAssignment {
   /** Original config slot this seat was assigned from. */
   configSlot: number;
 }
+
+// ============================================================================
+// Debug page
+// ============================================================================
+
+/** Log folders the Debug page can show: the three VD services and Civ 5 itself. */
+export type DebugLogSource = 'agents' | 'bridge' | 'mcp' | 'civ5';
+
+/** One log file inside a source folder. */
+export interface DebugLogFile {
+  /** File name, unique within its source. */
+  name: string;
+  /** Size in bytes. */
+  size: number;
+  /** ISO time of the last write. */
+  modified: string;
+}
+
+/**
+ * GET /api/debug/status response
+ */
+export interface DebugStatusResponse {
+  /** Whether Civ 5's LoggingEnabled is on in config.ini. */
+  civLogging: boolean;
+  /** Log files per source, newest first. A missing folder gives an empty list. */
+  sources: Record<DebugLogSource, DebugLogFile[]>;
+}
+
+/**
+ * PUT /api/debug/civ-logging request
+ */
+export interface SetCivLoggingRequest {
+  enabled: boolean;
+}
+
+/**
+ * PUT /api/debug/civ-logging response
+ */
+export interface SetCivLoggingResponse {
+  civLogging: boolean;
+}
+
+/**
+ * GET /api/debug/logs/:source/:file response
+ */
+export interface DebugLogFileResponse {
+  source: DebugLogSource;
+  name: string;
+  /** Full file size in bytes. */
+  size: number;
+  /** True when only the tail of the file is returned. */
+  truncated: boolean;
+  /** File text, starting at a whole line. */
+  content: string;
+}

@@ -1,6 +1,6 @@
 # vox-agents: Web UI
 
-Vox-agents ships a web dashboard for watching and steering everything this folder describes: start and stop game sessions, chat with agents, stream logs, and browse telemetry.
+Vox-agents ships a web dashboard for watching and steering everything this folder describes: start and stop game sessions, chat with agents, inspect logs, and browse telemetry.
 
 It is a Vue 3 single-page app (`vox-agents/ui/`) served by an Express backend (`src/web/`) that runs **in the same Node process as the agents**. The backend does not talk to the agents over a network; it reads the same in-memory registries and telemetry exporter they use.
 
@@ -15,7 +15,7 @@ Two conventions help local orchestration:
 
 Real-time data flows over Server-Sent Events, coordinated by an `SSEManager` (`src/web/sse-manager.ts`) that tracks connected clients and heartbeats them to keep proxies from closing idle streams.
 
-The API splits into four groups:
+The API splits into these groups:
 
 | Group | Where the code lives | What it does |
 | --- | --- | --- |
@@ -37,8 +37,16 @@ The Vue app uses PrimeVue components, Pinia stores, and virtual scrolling for th
 - **Session** is the control room: pick or edit a session config, start and stop the game, and watch session state (starting, running, recovering, stopping) and the player roster.
 - **Chat** is the hub for agent conversations: start a chat against a running game or a telemetry database, resume an existing thread, and open the conversation view, which renders streamed text, model reasoning, and tool calls and results as they arrive. Opening a chat sends the agent's greeting special message; database-backed chats stream the telepathist's preparation progress before the first reply.
 - **Telemetry** browses live contexts and stored databases, drilling from a database to its traces to the span hierarchy of a single trace, including the recorded LLM messages of each step. This is the primary debugging surface for agent behavior.
-- **Logs** shows the process's Winston log stream, live over SSE, filterable by source and level.
+- **Debug** (`/logs` redirects here) gathers the logging views in one card: a Live tab streaming the process's Winston logs filterable by level and source, file tabs for the vox-agents, bridge, MCP, and Civ 5 log folders, and a **Download all** button that zips the latest logs for bug reports. The header's **Civ 5 logging** switch sets the game's `LoggingEnabled` value in its `config.ini`, which Civ 5 reads only at startup, so the page asks for a Civ 5 restart after a change.
 - **Config** edits model definitions, per-agent model mappings, and API keys without touching files by hand.
+
+How the Debug page works:
+
+- File tabs open the newest log first for the service folders (rotated Winston files put the active one at the highest number) and `Lua.log` first for Civ 5, and give a file picker, a search box, a level filter for structured logs, and Refresh. Large files show only their last 512 KB.
+- The page is backed by its own route group, `src/web/routes/debug.ts`, mounted at `/api/debug`: `GET /status`, `PUT /civ-logging`, `GET /logs/:source/:file`, and `GET /bundle`. The file route reads only names taken from the folder listing, never arbitrary paths.
+- `src/utils/debug/log-sources.ts` locates the four log folders (sibling services are found next to the vox-agents folder) and `src/utils/debug/log-bundle.ts` builds the zip with yazl. The ini reads and writes go through `readCivLoggingEnabledContent` and `updateCivLoggingEnabledContent` in `src/utils/game/civ5-ini.ts`.
+- The bundle contains the `.log` files under `vox-agents/`, `bridge-service/`, `mcp-server/`, and `civ5/`, plus `setup.txt` with the VD version, platform, Civ 5 logging state, installed mod folder names, and which files were included or skipped. For the three services it takes only the newest file of each rotated log (the newest `combined*.log` and `error*.log`); every Civ 5 log goes in, since the game rewrites them on each launch. Any file over 10 MB, such as the DLL's `connection-pipe.log` during a long game, contributes only its newest 10 MB. It never includes API keys, `.env`, config JSON, or telemetry databases.
+- In the UI, `ui/src/views/DebugView.vue` composes the page from `ui/src/components/logging/`: `LogViewer.vue` for the live tab, `LogFileViewer.vue` for the file tabs, and a shared `LogTable.vue`.
 
 ## Development
 

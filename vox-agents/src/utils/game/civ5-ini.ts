@@ -8,6 +8,8 @@ const SYNC_SEED_KEY = 'SyncRandSeed';
 const MAP_SEED_KEY = 'MapRandSeed';
 const QUICK_COMBAT_KEY = 'SinglePlayerQuickCombatEnabled';
 const QUICK_MOVEMENT_KEY = 'SinglePlayerQuickMovementEnabled';
+const DEBUG_SECTION = 'DEBUG';
+const LOGGING_ENABLED_KEY = 'LoggingEnabled';
 
 /**
  * Concrete values to write into Civ's config.ini.
@@ -50,6 +52,20 @@ export function updateCivUserSettingsSkipAnimationsContent(content: string, enab
   setValueIgnoreCase(gameSettings, QUICK_COMBAT_KEY, value);
   setValueIgnoreCase(gameSettings, QUICK_MOVEMENT_KEY, value);
 
+  return ini.stringify();
+}
+
+/** Read whether Civ's own logging (Lua.log and friends) is enabled in config.ini. */
+export function readCivLoggingEnabledContent(content: string): boolean {
+  const ini = new Ini(content);
+  const value = getValueIgnoreCase(getSectionIgnoreCase(ini, DEBUG_SECTION), LOGGING_ENABLED_KEY);
+  return value?.trim() === '1';
+}
+
+/** Turn Civ's own logging on or off in config.ini while preserving other settings. */
+export function updateCivLoggingEnabledContent(content: string, enabled: boolean): string {
+  const ini = new Ini(content);
+  setValueIgnoreCase(getOrAddSection(ini, DEBUG_SECTION), LOGGING_ENABLED_KEY, enabled ? '1' : '0');
   return ini.stringify();
 }
 

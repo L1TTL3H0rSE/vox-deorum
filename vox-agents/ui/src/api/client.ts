@@ -54,7 +54,13 @@ import type {
   InspectDealResponse,
   DealRejectRequest,
   DealAcceptRequest,
-  DealMessagesResponse
+  DealMessagesResponse,
+  // Debug page types
+  DebugLogFileResponse,
+  DebugLogSource,
+  DebugStatusResponse,
+  SetCivLoggingRequest,
+  SetCivLoggingResponse
 } from '../utils/types';
 import type { TextStreamPart, ToolSet } from 'ai';
 
@@ -718,6 +724,35 @@ class ApiClient {
 
     // Return cleanup function
     return () => this.closeSseConnection(key);
+  }
+
+  // ============= Debug API Methods =============
+
+  /** List log files per source and read whether Civ 5 logging is on. */
+  async getDebugStatus(): Promise<DebugStatusResponse> {
+    return this.fetchJson<DebugStatusResponse>(`${this.baseUrl}/api/debug/status`);
+  }
+
+  /** Turn Civ 5's own logging on or off. Takes effect the next time Civ 5 starts. */
+  async setCivLogging(enabled: boolean): Promise<SetCivLoggingResponse> {
+    const request: SetCivLoggingRequest = { enabled };
+    return this.fetchJson<SetCivLoggingResponse>(`${this.baseUrl}/api/debug/civ-logging`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request)
+    });
+  }
+
+  /** Read the newest part of one log file. */
+  async getLogFile(source: DebugLogSource, name: string): Promise<DebugLogFileResponse> {
+    return this.fetchJson<DebugLogFileResponse>(
+      `${this.baseUrl}/api/debug/logs/${encodeURIComponent(source)}/${encodeURIComponent(name)}`
+    );
+  }
+
+  /** Link that downloads every log plus a setup summary as one zip. */
+  get debugBundleUrl(): string {
+    return `${this.baseUrl}/api/debug/bundle`;
   }
 
   // ============= Utility Methods =============

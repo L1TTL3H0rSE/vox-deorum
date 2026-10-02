@@ -16,6 +16,7 @@ import telemetryRoutes from './routes/telemetry.js';
 import configRoutes from './routes/config.js';
 import { createAgentRoutes } from './routes/agent.js';
 import sessionRoutes from './routes/session.js';
+import { createDebugRoutes } from './routes/debug.js';
 import { processManager } from '../infra/process-manager.js';
 import type { HealthStatus, ErrorResponse } from '../types/index.js';
 import { isAllowedDashboardRequest, isAllowedLoopbackOrigin } from './origin.js';
@@ -143,6 +144,9 @@ app.use('/api', createAgentRoutes());
 
 // Mount session routes
 app.use('/api/session', sessionRoutes);
+
+// Mount debug page routes (log files, Civ 5 logging switch, log bundle)
+app.use('/api/debug', createDebugRoutes());
 
 // Health check endpoint - minimal API foundation
 app.get('/api/health', (_req: Request, res: Response<HealthStatus>) => {

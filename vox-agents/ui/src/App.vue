@@ -67,9 +67,9 @@ const menuItems = [
         command: () => router.push('/telemetry')
       },
       {
-        label: 'Logs',
-        icon: 'pi pi-list',
-        command: () => router.push('/logs')
+        label: 'Debug',
+        icon: 'pi pi-wrench',
+        command: () => router.push('/debug')
       },
       {
         label: 'Settings',

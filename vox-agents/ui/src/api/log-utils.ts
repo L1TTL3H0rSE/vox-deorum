@@ -113,3 +113,32 @@ export function filterLogs(
     return true;
   });
 }
+
+/** Minimum-level choices for the log level filter, lowest first. */
+export const levelOptions: { label: string; value: LogEntry['level'] }[] = [
+  { label: 'Debug', value: 'debug' },
+  { label: 'Info', value: 'info' },
+  { label: 'Warn', value: 'warn' },
+  { label: 'Error', value: 'error' }
+];
+
+/**
+ * Get the table row class for a log level, so warnings and errors stand out
+ * @param level - The log level
+ * @returns Space-separated row classes
+ */
+export function getLogRowClass(level: string): string {
+  if (level === 'error') return 'table-row error';
+  if (level === 'warn') return 'table-row warning';
+  return 'table-row';
+}
+
+/**
+ * Check whether a log entry mentions the search text in its message or context
+ * @param log - The log entry
+ * @param query - Lowercased search text; empty matches everything
+ */
+export function logMatchesQuery(log: LogEntry, query: string): boolean {
+  if (!query) return true;
+  return `${log.context ?? ''} ${log.message ?? ''}`.toLowerCase().includes(query);
+}

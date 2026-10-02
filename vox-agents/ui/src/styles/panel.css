@@ -10,3 +10,23 @@
   border: 1px solid var(--p-content-border-color);
   border-radius: var(--p-content-border-radius);
 }
+
+/* Log panes on the Debug page: a slim filter row above a table that fills the rest */
+.log-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}

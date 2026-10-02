@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   readCivConfigSeedsContent,
+  readCivLoggingEnabledContent,
   updateCivConfigSeedsContent,
+  updateCivLoggingEnabledContent,
   updateCivUserSettingsSkipAnimationsContent
 } from '../../../src/utils/game/civ5-ini.js';
 
@@ -72,6 +74,48 @@ describe('Civ config.ini seed updates', () => {
     expect(readCivConfigSeedsContent(updated)).toEqual({ sync: '1', map: '2' });
     expect(updated).toContain('[config]');
     expect(updated).toContain('syncrandseed=1');
+  });
+});
+
+describe('Civ config.ini logging switch', () => {
+  it('reads LoggingEnabled as on only when it is 1', () => {
+    expect(readCivLoggingEnabledContent('[DEBUG]\nLoggingEnabled = 1')).toBe(true);
+    expect(readCivLoggingEnabledContent('[DEBUG]\nLoggingEnabled = 0')).toBe(false);
+    expect(readCivLoggingEnabledContent('[CONFIG]\nQuickStart = 0')).toBe(false);
+  });
+
+  it('turns logging on and off while preserving comments and unrelated settings', () => {
+    const content = [
+      '[DEBUG]',
+      '; Enable the logging system',
+      'LoggingEnabled = 0',
+      'MessageLog = 0',
+      '',
+      '[GAME]',
+      'WorldSize = WORLDSIZE_TINY'
+    ].join('\r\n');
+
+    const enabled = updateCivLoggingEnabledContent(content, true);
+    expect(readCivLoggingEnabledContent(enabled)).toBe(true);
+    expect(enabled).toContain('; Enable the logging system');
+    expect(enabled).toContain('MessageLog = 0');
+    expect(enabled).toContain('WorldSize = WORLDSIZE_TINY');
+
+    expect(readCivLoggingEnabledContent(updateCivLoggingEnabledContent(enabled, false))).toBe(false);
+  });
+
+  it('matches the section and key case-insensitively', () => {
+    const updated = updateCivLoggingEnabledContent('[debug]\nloggingenabled = 0', true);
+
+    expect(readCivLoggingEnabledContent(updated)).toBe(true);
+    expect(updated.match(/\[debug\]/gi)).toHaveLength(1);
+  });
+
+  it('adds the DEBUG section to an empty file', () => {
+    const updated = updateCivLoggingEnabledContent('', true);
+
+    expect(updated).toContain('[DEBUG]');
+    expect(readCivLoggingEnabledContent(updated)).toBe(true);
   });
 });
 
