@@ -1,15 +1,15 @@
-/** Tests for seat role defaults and per-seat triage resolution (src/strategist/seat-config.ts). */
+/** Tests for seat role defaults and per-seat triage and files resolution (src/strategist/seat-config.ts). */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlayerConfig, TriageSetting } from '../../../src/types/config.js';
+import type { FilesSetting, PlayerConfig, TriageSetting } from '../../../src/types/config.js';
 
 const mocks = vi.hoisted(() => ({
-  config: { triage: undefined as TriageSetting | undefined },
+  config: { triage: undefined as TriageSetting | undefined, files: undefined as FilesSetting | undefined },
 }));
 
 vi.mock('../../../src/utils/config.js', () => ({ config: mocks.config }));
 
-import { defaultDiplomat, resolveSeatTriage, seatAgents } from '../../../src/strategist/seat-config.js';
+import { defaultDiplomat, defaultFilesQuota, resolveSeatFiles, resolveSeatTriage, seatAgents } from '../../../src/strategist/seat-config.js';
 
 describe('seatAgents', () => {
   it('should default the diplomat to the built-in agent when the seat names none', () => {
@@ -97,5 +97,111 @@ describe('resolveSeatTriage', () => {
   it('should reject empty agent names in a list', () => {
     expect(() => resolveSeatTriage({ strategist: 'simple-strategist', triage: ['  '] }))
       .toThrow('seat triage must be a boolean or a list of non-empty agent names');
+  });
+});
+
+describe('resolveSeatFiles', () => {
+  const seat = (files: PlayerConfig['files']): PlayerConfig => ({ strategist: 'simple-strategist', files });
+
+  beforeEach(() => {
+    mocks.config.files = undefined;
+  });
+
+  it('should let the seat value beat the session and the session beat the root', () => {
+    mocks.config.files = 'read';
+    expect(resolveSeatFiles(seat('write'), 'read')).toEqual({ game: 'write', shared: {}, quota: defaultFilesQuota });
+    expect(resolveSeatFiles(seat(undefined), 'write')).toEqual({ game: 'write', shared: {}, quota: defaultFilesQuota });
+  });
+
+  it('should use the root setting when the seat and session are unset', () => {
+    mocks.config.files = 'read';
+    expect(resolveSeatFiles(seat(undefined))).toEqual({ game: 'read', shared: {}, quota: defaultFilesQuota });
+  });
+
+  it('should be off when nothing sets files', () => {
+    expect(resolveSeatFiles(seat(undefined))).toBeUndefined();
+  });
+
+  it('should let a seat false override a session write', () => {
+    expect(resolveSeatFiles(seat(false), 'write')).toBeUndefined();
+  });
+
+  it('should expand the read and write shorthands to game access with defaults', () => {
+    expect(resolveSeatFiles(seat('read'))).toEqual({ game: 'read', shared: {}, quota: 20 });
+    expect(resolveSeatFiles(seat('write'))).toEqual({ game: 'write', shared: {}, quota: 20 });
+  });
+
+  it('should pass a full object through with its quota kept', () => {
+    expect(resolveSeatFiles(seat({ game: 'write', shared: { lessons: 'read' }, quota: 5 })))
+      .toEqual({ game: 'write', shared: { lessons: 'read' }, quota: 5 });
+  });
+
+  it('should default the quota when an object omits it', () => {
+    expect(resolveSeatFiles(seat({ game: 'read' }))?.quota).toBe(20);
+  });
+
+  it('should be off when the object mounts nothing', () => {
+    expect(resolveSeatFiles(seat({ game: false }))).toBeUndefined();
+    expect(resolveSeatFiles(seat({ shared: {} }))).toBeUndefined();
+  });
+
+  it('should report no game access for a shared-only config', () => {
+    expect(resolveSeatFiles(seat({ shared: { lessons: 'write' } })))
+      .toEqual({ game: false, shared: { lessons: 'write' }, quota: 20 });
+  });
+
+  it('should reject a game value outside false, read and write with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ game: 'rw' } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.game');
+  });
+
+  it('should reject a shared name with spaces or capitals with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ shared: { 'Bad Name': 'read' } } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.shared.Bad Name');
+  });
+
+  it('should reject a shared name starting with a hyphen with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ shared: { '-x': 'read' } } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.shared.-x');
+  });
+
+  it('should reject a shared access outside read and write with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ shared: { lessons: 'rw' } } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.shared.lessons');
+  });
+
+  it('should reject shared given as a list with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ shared: ['lessons'] } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.shared');
+  });
+
+  it('should reject a zero quota with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ game: 'read', quota: 0 } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.quota');
+  });
+
+  it('should reject a fractional quota with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ game: 'read', quota: 1.5 } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.quota');
+  });
+
+  it('should reject a string quota with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ game: 'read', quota: '5' } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.quota');
+  });
+
+  it('should reject an unknown object key with its config path', () => {
+    expect(() => resolveSeatFiles(seat({ game: 'read', mode: 'write' } as never), undefined, 3))
+      .toThrow('llmPlayers.3.files.mode');
+  });
+
+  it('should reject true as a files setting with its config path', () => {
+    expect(() => resolveSeatFiles(seat(true as never), undefined, 3))
+      .toThrow('llmPlayers.3.files');
+  });
+
+  it('should reject null as a files setting with its config path', () => {
+    expect(() => resolveSeatFiles(seat(null as never), undefined, 3))
+      .toThrow('llmPlayers.3.files');
   });
 });

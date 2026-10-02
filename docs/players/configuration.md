@@ -31,6 +31,24 @@ The Setup wizard connects you with the API service, authenticates for you, and l
 
 Advanced setups can let a CLI-backed model read or write files or reach the web during its turn. Enabled agents are told which capabilities they have, and file access gives agents for the same civilization a shared temporary workspace for notes. Read access can consult its create-once guide, while Write access can maintain the notes and guide. These files generally survive turns and restarts until temporary storage is cleaned, but they are not archival and do not follow a switch between Codex and Claude Code. See the [developer overview](../developers/vox-agents/overview.md#models-and-configuration) for the full policy.
 
+## File workspace
+
+The per-seat `files` setting gives one AI civilization's agents a `bash` tool: a simulated shell, on any provider, where they can keep notes and work with data. It is off by default. There is no network, Python, or JavaScript; common text tools, `jq`, and `sqlite3` work.
+
+`"files": "write"` or `"read"` is the shorthand that gives your seat's game folder write or read access. The full form is:
+
+```json
+"files": { "game": "write", "shared": { "lessons": "read" }, "quota": 20 }
+```
+
+- `game` (`false`, `"read"`, or `"write"`): the seat's folder for the current game, shown as `/workspace/game` in the shell and saved on disk at `workspaces/games/<gameID>-player-<playerID>/` inside the telemetry folder. All agents of one player in one game share it.
+- `shared`: named folders at `/workspace/shared/<name>`, saved under `workspaces/shared/`, that persist across games and seats. A name uses lowercase letters, digits, `-`, or `_`, starting with a letter or digit.
+- `quota`: how many model steps of one agent run may use bash (default 20). Bash itself is cheap, but each step costs a full model call, so several bash calls issued in parallel in one response count as one step. After the quota is used, bash returns an error without running.
+
+In the shell, `/tmp` is scratch space for one player that persists for the whole game, and anything written elsewhere is discarded after each call. Agents cannot change a `"read"` folder; a `"write"` folder is saved to disk. Each writable game or shared folder gets an `AGENTS.md` guide, created once and never overwritten, so agents and you can edit it.
+
+Set `files` on a seat (`llmPlayers.<n>.files`), in the session config, or in `vox-agents/config.json`; the highest level that sets it wins and replaces lower ones whole, with no merging, the same as `triage`. An invalid value fails the session's preflight check before the game launches, and the error names the config path to fix. Two seats of the same game writing one shared name can pass information to each other, so use different names per seat or read access. The tool needs Node.js 22.17.0 or newer (Vox Deorum requires 22.23.3); on older Node it returns an error asking you to upgrade. See the [developer overview](../developers/vox-agents/overview.md#models-and-configuration) for the full policy.
+
 ## Choosing a model
 
 The wizard lists the models available through whatever you connected:

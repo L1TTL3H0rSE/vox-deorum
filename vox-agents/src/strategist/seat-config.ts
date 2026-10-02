@@ -1,15 +1,18 @@
 /**
  * @module strategist/seat-config
  *
- * Reads a seat's agent roles and resolves its triage setting. Shared by session preflight,
- * player assignments, and the seat context so the defaults live in one place.
+ * Reads a seat's agent roles and resolves its triage and files settings. Shared by session
+ * preflight, player assignments, and the seat context so the defaults live in one place.
  */
 
-import type { PlayerConfig, TriageSetting } from "../types/config.js";
+import type { FilesConfig, FilesSetting, PlayerConfig, ResolvedFilesConfig, TriageSetting } from "../types/config.js";
 import { config } from "../utils/config.js";
 
 /** Agent that voices a seat's diplomacy when the seat doesn't name one. */
 export const defaultDiplomat = "diplomat";
+
+/** Bash calls an agent run may attempt when the files setting doesn't name a quota. */
+export const defaultFilesQuota = 20;
 
 /** The agent names filling a seat's roles, with the diplomat defaulted. */
 export interface SeatAgents {
@@ -70,4 +73,71 @@ export function resolveSeatTriage(playerConfig: PlayerConfig, sessionTriage?: Tr
   if (names.has("strategist")) names.add(playerConfig.strategist);
   if (names.has("diplomat")) names.add(playerConfig.diplomat ?? defaultDiplomat);
   return [...names];
+}
+
+/**
+ * Resolve the files setting for one seat: the seat's own value, else the session's, else the
+ * root config's, else off. The highest level that sets a value replaces lower levels whole.
+ * The `"read"` / `"write"` shorthand expands to game access; an object is validated and
+ * normalized so the quota always has a value. Returns undefined when nothing would be mounted.
+ *
+ * @param playerConfig - The seat's configuration
+ * @param sessionFiles - The session config's top-level files setting
+ * @param slot - The seat's config slot, used to identify an invalid seat setting
+ * @throws if the winning value is not a valid files setting; the message names the config path
+ */
+export function resolveSeatFiles(playerConfig: PlayerConfig, sessionFiles?: FilesSetting, slot?: string | number): ResolvedFilesConfig | undefined {
+  let setting: unknown = config.files === undefined ? false : config.files;
+  let source = "config.files";
+  if (sessionFiles !== undefined) {
+    setting = sessionFiles;
+    source = "session.files";
+  }
+  if (playerConfig.files !== undefined) {
+    setting = playerConfig.files;
+    source = slot === undefined ? "seat files" : `llmPlayers.${slot}.files`;
+  }
+
+  if (setting === false) return undefined;
+  if (setting === "read" || setting === "write") setting = { game: setting };
+  if (typeof setting !== "object" || setting === null || Array.isArray(setting)) {
+    throw new Error(`${source} must be false, "read", "write", or an object with game, shared and quota.`);
+  }
+
+  const files = setting as Record<string, unknown>;
+  for (const key of Object.keys(files)) {
+    if (key !== "game" && key !== "shared" && key !== "quota") {
+      throw new Error(`${source}.${key} is not a files option; allowed keys are game, shared and quota.`);
+    }
+  }
+  const { game, shared, quota } = files;
+  if (game !== undefined && game !== false && game !== "read" && game !== "write") {
+    throw new Error(`${source}.game must be false, "read" or "write".`);
+  }
+  if (shared !== undefined && (typeof shared !== "object" || shared === null || Array.isArray(shared))) {
+    throw new Error(`${source}.shared must be an object of folder names to "read" or "write".`);
+  }
+  if (shared !== undefined) {
+    for (const [name, access] of Object.entries(shared)) {
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) {
+        throw new Error(`${source}.shared.${name} must be a folder name of lowercase letters, digits, "_" and "-", starting with a letter or digit.`);
+      }
+      if (access !== "read" && access !== "write") {
+        throw new Error(`${source}.shared.${name} must be "read" or "write".`);
+      }
+    }
+  }
+  if (quota !== undefined && (!Number.isInteger(quota) || (quota as number) <= 0)) {
+    throw new Error(`${source}.quota must be a positive integer.`);
+  }
+
+  const resolved = files as FilesConfig;
+  if ((game !== "read" && game !== "write") && Object.keys(resolved.shared ?? {}).length === 0) {
+    return undefined;
+  }
+  return {
+    game: resolved.game ?? false,
+    shared: { ...resolved.shared },
+    quota: resolved.quota ?? defaultFilesQuota,
+  };
 }

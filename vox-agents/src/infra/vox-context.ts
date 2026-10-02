@@ -26,7 +26,7 @@ import { AgentParameters, VoxAgent } from "./vox-agent.js";
 import type { TriageDecision } from "./vox-agent.js";
 import { createLogger } from "../utils/logger.js";
 import { mcpClient } from "../utils/models/mcp-client.js";
-import { Model, StreamingEventCallback, TriageSetting } from "../types/index.js";
+import { Model, ResolvedFilesConfig, StreamingEventCallback, TriageSetting } from "../types/index.js";
 import { v4 as uuidv4 } from 'uuid';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
@@ -39,6 +39,8 @@ import { contextRegistry } from "./context-registry.js";
 import type { VoxSession } from "./vox-session.js";
 import { createAgentTool } from "../utils/tools/agent-tools.js";
 import { wrapMCPTools } from "../utils/tools/mcp-tools.js";
+import { bashToolName, createBashTool } from "../utils/tools/bash-tool.js";
+import { PlayerWorkspace } from "../utils/workspace/player-workspace.js";
 import { executeAgent } from "./vox-execute.js";
 import { evaluateOn } from "./vox-evaluate.js";
 import type { EvaluateOptions } from "./vox-evaluate.js";
@@ -96,6 +98,15 @@ export class VoxContext<TParameters extends AgentParameters> implements Executio
    * `resolveSeatTriage`); every other context leaves triage off.
    */
   public triage: TriageSetting = false;
+
+  /**
+   * Workspace file access in this context. Only strategist seat contexts set it (see
+   * `resolveSeatFiles`); every other context has no workspace.
+   */
+  public files?: ResolvedFilesConfig;
+
+  /** Workspaces by game and player, so every agent of a seat shares one shell. */
+  private readonly workspaces = new Map<string, PlayerWorkspace>();
 
   /**
    * Current execution frame for concurrent root runs. The store points at a {@link RootRun}
@@ -226,6 +237,21 @@ export class VoxContext<TParameters extends AgentParameters> implements Executio
   }
 
   /**
+   * Whether bash may run commands on the current step of the active execution. The step loop sets
+   * it before each model call from the steps the execution already spent on bash, and holds it
+   * through the step so parallel calls in one response all run. Nested and concurrent executions
+   * each own their value. True when nothing set it, such as a direct tool call outside the loop.
+   */
+  public get bashOpen(): boolean {
+    return this.als.getStore()?.bashOpen ?? true;
+  }
+  public set bashOpen(open: boolean) {
+    const frame = this.als.getStore();
+    if (!frame) throw new Error('VoxContext.bashOpen can only be set inside an active run.');
+    frame.bashOpen = open;
+  }
+
+  /**
    * Resets the cached model identity so it will be re-sent on the next strategist execution.
    * Call this after crash recovery when the game has lost its Lua state.
    */
@@ -293,6 +319,27 @@ export class VoxContext<TParameters extends AgentParameters> implements Executio
         this.tools[toolName] = tool;
       }
     }
+
+    // The workspace tool, only for seats that turn files on
+    if (this.files) this.tools[bashToolName] = createBashTool(this);
+  }
+
+  /**
+   * The workspace of one player in one game, created on first use and shared by later calls.
+   * Undefined when this context has no files setting.
+   *
+   * @param gameID - The game the workspace belongs to
+   * @param playerID - The player the workspace belongs to
+   */
+  public workspace(gameID: string, playerID: number): PlayerWorkspace | undefined {
+    if (!this.files) return undefined;
+    const key = `${gameID}-player-${playerID}`;
+    let workspace = this.workspaces.get(key);
+    if (!workspace) {
+      workspace = new PlayerWorkspace(this.files, gameID, playerID);
+      this.workspaces.set(key, workspace);
+    }
+    return workspace;
   }
 
   /**

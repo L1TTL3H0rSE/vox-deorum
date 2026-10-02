@@ -117,6 +117,8 @@ export interface VoxAgentsConfig {
   obs?: ObsConfig;
   /** Default triage for every seat when neither the seat nor the session sets one. */
   triage?: TriageSetting;
+  /** Default files for every seat when neither the seat nor the session sets one. */
+  files?: FilesSetting;
   /** Launch the DirectX 11 build of Civilization V when the install has one. Defaults to true. */
   useDX11?: boolean;
 }
@@ -214,6 +216,25 @@ export interface PacingConfig {
  */
 export type TriageSetting = boolean | string[];
 
+/** How a workspace mount may be used from the agent side. */
+export type FileAccess = 'read' | 'write';
+
+/** Workspace file access: the per-game folder, named shared folders, and a bash quota. */
+export interface FilesConfig {
+  /** Access to the game folder; false leaves it unmounted. */
+  game?: FileAccess | false;
+  /** Named cross-game folders, each with its access. */
+  shared?: Record<string, FileAccess>;
+  /** Bash calls allowed per agent run. */
+  quota?: number;
+}
+
+/** The `files` setting: off, a shorthand game access level, or a full object. */
+export type FilesSetting = false | FileAccess | FilesConfig;
+
+/** The normalized form agents read; quota is always set. */
+export type ResolvedFilesConfig = Required<FilesConfig>;
+
 /**
  * Player-specific configuration for LLM control
  */
@@ -239,6 +260,8 @@ export interface PlayerConfig {
   llms?: Record<string, Model | string>;
   /** Triage for this seat's agents; replaces the session and root settings when present. */
   triage?: TriageSetting;
+  /** Files for this seat's workspace; replaces the session and root settings when present. */
+  files?: FilesSetting;
 }
 
 /**
@@ -318,6 +341,9 @@ export interface StrategistSessionConfig extends SessionConfig {
 
   /** Triage for every seat that doesn't set its own; replaces the root setting when present. */
   triage?: TriageSetting;
+
+  /** Files for every seat that doesn't set its own; replaces the root setting when present. */
+  files?: FilesSetting;
 
   /**
    * Controls randomization of the mapping between config slots and actual game

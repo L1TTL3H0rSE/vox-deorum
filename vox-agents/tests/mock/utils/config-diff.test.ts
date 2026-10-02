@@ -105,6 +105,23 @@ describe('computeConfigDiff', () => {
     const diff = computeConfigDiff(full, defaults);
     expect(diff).not.toHaveProperty('triage');
   });
+
+  it('should include a files setting that differs from the defaults', () => {
+    const defaults = makeDefaults();
+    const full = cloneConfig(defaults);
+    full.files = { game: 'write', shared: { lessons: 'read' } };
+    const diff = computeConfigDiff(full, defaults);
+    expect(diff).toEqual({ files: { game: 'write', shared: { lessons: 'read' } } });
+  });
+
+  it('should omit files when both sides leave it unset', () => {
+    const defaults = makeDefaults();
+    const full = cloneConfig(defaults);
+    // A different top-level difference keeps the diff non-empty so this checks files specifically.
+    full.webui.port = 4322;
+    const diff = computeConfigDiff(full, defaults);
+    expect(diff).not.toHaveProperty('files');
+  });
 });
 
 describe('mergeConfigWithDefaults', () => {
@@ -140,6 +157,12 @@ describe('mergeConfigWithDefaults', () => {
     const defaults = makeDefaults();
     expect(mergeConfigWithDefaults({ triage: true }, defaults).triage).toBe(true);
     expect(mergeConfigWithDefaults({ triage: ['strategist'] }, defaults).triage).toEqual(['strategist']);
+  });
+
+  it('should carry a files setting from the file', () => {
+    const defaults = makeDefaults();
+    expect(mergeConfigWithDefaults({ files: 'write' }, defaults).files).toBe('write');
+    expect(mergeConfigWithDefaults({ files: { game: 'read' } }, defaults).files).toEqual({ game: 'read' });
   });
 
   it('should ignore a stale deletion tombstone for an unknown default model', () => {

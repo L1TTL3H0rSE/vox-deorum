@@ -34,4 +34,17 @@ describe('loadConfig', () => {
     refreshConfig();
     expect(config.useDX11).toBe(true);
   });
+
+  it('carries a saved files setting into the runtime config', async () => {
+    vi.resetModules();
+    const { config, refreshConfig } = await import('../../../src/utils/config.js');
+
+    fileConfig.json = JSON.stringify({ files: { game: 'write', shared: { lessons: 'read' } } });
+    refreshConfig();
+    expect(config.files).toEqual({ game: 'write', shared: { lessons: 'read' } });
+
+    fileConfig.json = '{}';
+    refreshConfig();
+    expect(config.files).toBeUndefined();
+  });
 });

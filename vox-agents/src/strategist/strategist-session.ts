@@ -27,7 +27,7 @@ import { unwrapMcpResponse } from "../utils/models/mcp-response.js";
 import { agentRegistry } from '../infra/agent-registry.js';
 import { ensureModelsResolved, selectEvaluatorReference, selectModelReference } from '../utils/models/resolution.js';
 import { triageEnabled } from '../infra/triage.js';
-import { resolveSeatTriage, seatAgents } from './seat-config.js';
+import { resolveSeatFiles, resolveSeatTriage, seatAgents } from './seat-config.js';
 import { DEFAULT_NEGOTIATOR } from '../envoy/agents/resolve-negotiator.js';
 import {
   autoPlayTurnLimit,
@@ -591,6 +591,7 @@ export class StrategistSession extends VoxSession<StrategistSessionConfig> {
         syncSeed: this.seatingClaim?.seeds?.sync,
         session: this,
         triage: this.config.triage,
+        files: this.config.files,
       });
       await player.context.registerTools();
       this.activePlayers.set(actualPlayerID, player);
@@ -682,11 +683,13 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
    * because its hook would otherwise skip silently. Arbitrary override-map entries are
    * deliberately excluded because they cannot run in this session.
    *
-   * @throws if a seat role is not an agent name (see {@link seatAgents})
+   * @throws if a seat role is not an agent name (see {@link seatAgents}) or a files setting is invalid (see {@link resolveSeatFiles})
    */
   private modelReferencesForPlayer(slot: string, playerConfig: PlayerConfig): string[] {
     const seat = seatAgents(playerConfig, slot);
     const triage = resolveSeatTriage(playerConfig, this.config.triage, slot);
+    // Preflight the seat's files setting so an invalid one throws at session start.
+    resolveSeatFiles(playerConfig, this.config.files, slot);
     const agentNames = new Set<string>();
     /** Add one agent and recursively include its fixed model dependencies. */
     const visit = (name: string): void => {
