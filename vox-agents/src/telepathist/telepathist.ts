@@ -128,21 +128,15 @@ export abstract class Telepathist extends Envoy<TelepathistParameters> {
   protected reasoningTier = "default" as const;
 
   /**
-   * Disables tools when in special message mode.
+   * Declares no tools for a special message run, so the model answers in plain text.
    */
-  public override async prepareStep(
+  public override async getRunTools(
     parameters: TelepathistParameters,
     input: EnvoyThread,
-    lastStep: StepResult<Record<string, Tool>> | null,
-    allSteps: StepResult<Record<string, Tool>>[],
-    messages: ModelMessage[],
     context: VoxContext<TelepathistParameters>
-  ) {
-    const config = await super.prepareStep(parameters, input, lastStep, allSteps, messages, context);
-    if (this.isSpecialMode(input)) {
-      config.activeTools = [];
-    }
-    return config;
+  ): Promise<string[] | undefined> {
+    if (this.isSpecialMode(input)) return [];
+    return super.getRunTools(parameters, input, context);
   }
 
   // --- Special message handling ---

@@ -14,6 +14,17 @@ import { formatModelString } from './utils/model-resolver.js';
 import type { OracleConfig, OracleParameters, OracleInput, ReplayResult, ReplayDecision } from './types.js';
 
 /**
+ * The tools the original run had removed by a given step (0-based): those on its first step's list
+ * but missing from that step's list. Past the last recorded step the last list holds, since a removal
+ * lasts for the rest of a run.
+ */
+export function removedToolsAtStep(stepTools: string[][], step: number): string[] {
+  if (stepTools.length === 0) return [];
+  const current = stepTools[Math.min(step, stepTools.length - 1)];
+  return stepTools[0].filter(name => !current.includes(name));
+}
+
+/**
  * Oracle agent that replays prompts through an LLM for counterfactual analysis.
  * Stop behavior adapts to the agent type being replayed.
  */
@@ -62,6 +73,28 @@ export class OracleAgent extends VoxAgent<OracleParameters, OracleInput, ReplayR
   }
 
   /**
+   * Removes on each replay step the tools the original run had removed by that step, so a replay
+   * rejects the same calls the original would have. Removals apply to the replay's declared tools,
+   * so tools a modifyPrompt override adds stay available.
+   */
+  public override async prepareStep(
+    parameters: OracleParameters,
+    input: OracleInput,
+    lastStep: StepResult<Record<string, Tool>> | null,
+    allSteps: StepResult<Record<string, Tool>>[],
+    messages: ModelMessage[],
+    context: VoxContext<OracleParameters>
+  ) {
+    const config = await super.prepareStep(parameters, input, lastStep, allSteps, messages, context);
+    const removed = removedToolsAtStep(parameters.stepTools, allSteps.length);
+    if (removed.length > 0) {
+      const declared = this.getActiveTools(parameters) ?? Object.keys(context.tools);
+      config.activeTools = declared.filter(name => !removed.includes(name));
+    }
+    return config;
+  }
+
+  /**
    * Stop check that adapts to the agent type being replayed.
    * - Strategist: stop when a decision tool call is found (multi-step, up to 5 steps)
    * - Other: stop after one step
@@ -84,10 +117,12 @@ export class OracleAgent extends VoxAgent<OracleParameters, OracleInput, ReplayR
     _finalText: string,
     _context: VoxContext<OracleParameters>
   ): Promise<ReplayResult | undefined> {
-    // Collect all tool calls as ReplayDecisions
+    // Collect the tool calls that would have run as ReplayDecisions. An invalid call (a tool removed
+    // for that step, or input that failed to parse) never ran, so it is no decision.
     const decisions: ReplayDecision[] = [];
     for (const step of parameters.capturedSteps) {
       for (const tc of step.toolCalls) {
+        if ((tc as { invalid?: boolean }).invalid) continue;
         const decision: ReplayDecision = {
           toolName: tc.toolName,
           args: { ...(tc as any).input },

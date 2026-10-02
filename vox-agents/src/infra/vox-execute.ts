@@ -27,6 +27,7 @@ import { stepTokenUsage } from "../utils/telemetry/model-usage.js";
 import { isHostCapabilityProvider } from "../utils/models/providers/host-tools.js";
 import { stripMarkdownConfig, stripToolArtifacts } from "../utils/models/text-cleaning.js";
 import { appendReminder } from "../utils/prompts/reminders.js";
+import { buildRemovedToolRejections } from "../utils/tools/tool-availability.js";
 import { isContextLengthError } from "../utils/retry.js";
 import { agentRegistry } from "./agent-registry.js";
 import type { ExecuteTokenOutput, ExecuteOptions } from "./vox-run.js";
@@ -107,6 +108,7 @@ export async function executeAgent<TParameters extends AgentParameters>(
         const prepared: PreparedAgentState = {
           system,
           messages: await agent.getInitialMessages(params, input, host),
+          tools: await agent.getRunTools(params, input, host),
         };
         const decision = await resolveTriage(host, agent, params, input, options, prepared);
         frame.triage = decision;
@@ -165,6 +167,7 @@ export async function executeAgent<TParameters extends AgentParameters>(
             allSteps,
             stepCount,
             messages,
+            prepared.tools,
             modelConfig,
             codexResponseId,
             callback
@@ -259,6 +262,7 @@ async function resolveTriage<TParameters extends AgentParameters>(
  * @param allSteps - All steps executed so far
  * @param stepCount - The current step number
  * @param messages - The current message history
+ * @param declaredTools - The run's declared tools (undefined for all registered tools)
  * @param model - The model identifier
  * @param previousResponseId - The prior Codex step's response id, forwarded so the proxy continues the same thread
  * @param callback - Optional streaming event callback for this step
@@ -272,6 +276,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
   allSteps: StepResult<ToolSet>[],
   stepCount: number,
   messages: ModelMessage[],
+  declaredTools: string[] | undefined,
   model: Model,
   previousResponseId?: string,
   callback?: StreamingEventCallback
@@ -291,28 +296,43 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       // working-directory policy remains stable across a single step.
       const runtimeIdentity = { workingDirId: `${parameters.gameID}-${parameters.playerID}` };
       const stepProviderOptions = buildProviderOptions(stepModel, runtimeIdentity, previousResponseId);
-      const stepActiveTools = stepConfig.activeTools || agent.getActiveTools(parameters);
-      const stepToolChoice = stepActiveTools && stepActiveTools.length > 0 ? agent.toolChoice : "auto";
+      // The run's tools stay declared on every step (undefined means "all registered tools", the AI
+      // SDK's activeTools contract), so narrowing never changes the cached prompt prefix. Tools that
+      // prepareStep removes after a step are enforced once the model replies: each gets a rejection
+      // hook, and the closing reminder below names what may run. prepareStep can only remove tools, so
+      // a name it returns outside the run's tools is dropped.
+      const declaredNames = declaredTools ?? Object.keys(host.tools);
+      const executableTools = stepConfig.activeTools?.filter((name) => declaredNames.includes(name)) ?? declaredTools;
+      const executableNames = executableTools ?? declaredNames;
+      const rejections = buildRemovedToolRejections(declaredNames, executableNames);
+      const narrowed = rejections !== undefined;
+      // Derived from the executable list, so a step that may run nothing is never forced to call.
+      const stepToolChoice = executableTools && executableTools.length > 0 ? agent.toolChoice : "auto";
       const stepOutputSchema = stepConfig.outputSchema;
 
-      // Nudge the model to finalize once the loop continues past the first step. Runs here, after
-      // prepareStep has finalized this step's active tools (undefined means "all registered tools",
-      // the AI SDK's activeTools contract), so the nudge can only name tools this step offers. Any
-      // rescue prompt prepareStep appended is already in `messages` and stays ahead of the nudge:
-      // the model reads "your last response was empty, retry" and then "finalize with these tools".
-      if (allSteps.length > 0) {
-        messages = appendReminder(
-          messages,
-          agent.continuationNudge(parameters, stepActiveTools ?? Object.keys(host.tools)),
-        );
-      }
+      // Append the closing reminder (the requirement when the choice is required, tool policy when
+      // narrowed, finalize nudge after the first step). Provider middleware keeps its system text the
+      // same for auto and required, so only this end of the prompt changes with the choice. Any
+      // rescue prompt prepareStep appended is already in `messages` and stays ahead of it: the model
+      // reads "your last response was empty, retry" and then what it may call and finish with.
+      messages = appendReminder(
+        messages,
+        agent.continuationNudge(parameters, {
+          executable: executableNames,
+          narrowed,
+          step: allSteps.length,
+          required: stepToolChoice === 'required',
+        }),
+      );
 
       // The markdown rendering hint on tool results is for humans, not the model.
       stripMarkdownConfig(messages);
 
-      // Record step configuration in span
+      // Record step configuration in span. step.tools is what may run on this step; since tools are
+      // only removed after a step ran, the first step's list is the run's declared list (Oracle
+      // rebuilds replay declarations from it and per-step removals from the later steps).
       stepSpan.setAttributes({
-        'step.tools': JSON.stringify(stepActiveTools),
+        'step.tools': JSON.stringify(executableTools),
         'step.tools.choice': stepToolChoice,
         'step.messages': JSON.stringify(messages),
       });
@@ -336,8 +356,8 @@ async function executeAgentStep<TParameters extends AgentParameters>(
             ...runtimeIdentity,
             onToolFraming: ({ framing }) => { stepToolFraming = framing; },
             // Provider guidance names these as what ends the turn. Passed unfiltered: each
-            // middleware intersects them with the tools actually declared on the wire, which
-            // already reflects this step's active tools.
+            // middleware intersects them with the run's declared tools, so its text stays stable on
+            // narrowed steps; the closing reminder names what may actually run.
             completionTools: agent.completionTools,
           }),
           providerOptions: stepProviderOptions,
@@ -350,10 +370,12 @@ async function executeAgentStep<TParameters extends AgentParameters>(
           messages: messages,
           // Tools
           tools: host.tools,
-          activeTools: stepActiveTools,
+          activeTools: declaredTools,
+          // Only removed tools have an entry; their calls come back invalid with an error result.
+          experimental_refineToolInput: rejections as any,
           // Providers that reject a wire-level required tool choice (Anthropic, Codex) map it to auto
-          // in provider middleware installed by getModel, preserving the requirement in the prompt
-          // and naming the agent's completionTools as the calls that end the turn.
+          // in provider middleware installed by getModel, which names the agent's completionTools as
+          // the calls that end the turn; the closing reminder above carries the requirement.
           toolChoice: stepToolChoice as any,
           runtimeContext: parameters as any,
           toolsContext: Object.fromEntries(

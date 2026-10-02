@@ -31,7 +31,10 @@ import { VoxSpanExporter } from '../../../src/utils/telemetry/vox-exporter.js';
 import type { StrategistParameters } from '../../../src/strategist/strategy-parameters.js';
 import { makeStrategistParameters } from '../../helpers/fake-vox-context.js';
 import type { Model } from '../../../src/types/index.js';
-import { buildCompletionToolsNudge } from '../../../src/utils/tools/tool-names.js';
+import {
+  buildClosingReminder,
+  buildToolRequirementReminder,
+} from '../../../src/utils/tools/tool-names.js';
 import { buildRescuePrompt } from '../../../src/utils/models/text-cleaning.js';
 
 const stc = vi.mocked(streamTextWithConcurrency);
@@ -157,6 +160,28 @@ class DynamicNudgeAgent extends VoxAgent<StrategistParameters> {
   }
 }
 
+/** One-step agent that restricts its whole run through getRunTools. */
+class RunToolsAgent extends VoxAgent<StrategistParameters> {
+  readonly name = 'test-run-tools';
+  readonly description = 'run-level tool restriction test agent';
+  override completionTools = ['finish-a', 'finish-b'];
+
+  /** Selects a mocked model. */
+  override getModel(): Model { return { provider: 'test', name: 'test' } as Model; }
+
+  /** Supplies the minimal system prompt required by the execution loop. */
+  async getSystem(): Promise<string> { return 'system'; }
+
+  /** Lists both completion tools as the agent's full tool list. */
+  override getActiveTools(): string[] { return ['finish-a', 'finish-b']; }
+
+  /** Declares only one of them for this run. */
+  override async getRunTools(): Promise<string[]> { return ['finish-b']; }
+
+  /** Stops after one step. */
+  override stopCheck(): boolean { return true; }
+}
+
 /** Three-step agent whose completion tool stays active, so every continuation derives the same nudge. */
 class RepeatNudgeAgent extends VoxAgent<StrategistParameters> {
   readonly name = 'test-repeat-nudge';
@@ -216,6 +241,7 @@ beforeAll(() => {
   agentRegistry.register(new CodexThreadAgent('test-codex-thread') as any);
   agentRegistry.register(new TwoStepAgent('test-two-step') as any);
   agentRegistry.register(new DynamicNudgeAgent() as any);
+  agentRegistry.register(new RunToolsAgent() as any);
   agentRegistry.register(new RepeatNudgeAgent() as any);
   agentRegistry.register(new NestingAgent('test-nesting', 'test-step-child') as any);
   agentRegistry.register(new DiplomacyOnlyAgent('test-diplomacy-only') as any);
@@ -289,15 +315,52 @@ describe('VoxContext continuation nudges', () => {
     });
 
     expect(stc).toHaveBeenCalledTimes(2);
+    const first = stc.mock.calls[0]![0] as any;
     const continuation = stc.mock.calls[1]![0] as any;
-    expect(continuation.activeTools).toEqual(['finish-b']);
-    // prepareStep's rescue stays ahead of the nudge appended after the tools were resolved.
+    // The baseline stays declared; only the removed tool gets a rejection entry.
+    expect(first.experimental_refineToolInput).toBeUndefined();
+    expect(continuation.activeTools).toEqual(['finish-a', 'finish-b']);
+    expect(Object.keys(continuation.experimental_refineToolInput)).toEqual(['finish-a']);
+    expect(continuation.toolChoice).toBe(first.toolChoice);
+    // prepareStep's rescue stays ahead of the closing reminder appended after the tools were resolved.
     expect(continuation.messages.at(-2).content).toBe(buildRescuePrompt('required'));
     expect(continuation.messages.at(-1)).toEqual({
       role: 'user',
-      content: buildCompletionToolsNudge(['finish-b']),
+      content: buildClosingReminder(['finish-b'], ['finish-a', 'finish-b'], { narrowed: true, step: 1, required: true }),
     });
-    expect(continuation.messages.at(-1).content).not.toContain('finish-a');
+  });
+
+  it('declares only the run tools, with no rejection entries or policy sentence', async () => {
+    const ctx = new VoxContext<StrategistParameters>({}, 'exec-run-tools');
+    const base = makeStrategistParameters();
+
+    await ctx.withRun({ parameters: base, overrides: { turn: 1 } }, async () => {
+      await ctx.execute('test-run-tools', {});
+    });
+
+    expect(stc).toHaveBeenCalledTimes(1);
+    const first = stc.mock.calls[0]![0] as any;
+    expect(first.activeTools).toEqual(['finish-b']);
+    expect(first.experimental_refineToolInput).toBeUndefined();
+    // A required first step closes with the requirement alone; nothing names a removal.
+    expect(first.toolChoice).toBe('required');
+    expect(first.messages).toEqual([
+      { role: 'system', content: 'system' },
+      { role: 'user', content: buildToolRequirementReminder() },
+    ]);
+  });
+
+  it('adds no rejection entries or closing reminder to an unnarrowed auto first step', async () => {
+    const ctx = new VoxContext<StrategistParameters>({}, 'exec-unnarrowed');
+    const base = makeStrategistParameters();
+
+    await ctx.withRun({ parameters: base, overrides: { turn: 1 } }, async () => {
+      await ctx.execute('test-step-a', {});
+    });
+
+    const first = stc.mock.calls[0]![0] as any;
+    expect(first.experimental_refineToolInput).toBeUndefined();
+    expect(first.messages).toEqual([{ role: 'system', content: 'system' }]);
   });
 
   it('does not repeat a nudge that is already the last message', async () => {
@@ -327,7 +390,7 @@ describe('VoxContext continuation nudges', () => {
     });
 
     expect(stc).toHaveBeenCalledTimes(3);
-    const nudge = buildCompletionToolsNudge(['finish-a']);
+    const nudge = buildClosingReminder(['finish-a'], ['finish-a'], { narrowed: false, step: 1, required: true });
     const third = stc.mock.calls[2]![0] as any;
     expect(third.messages.filter((m: any) => m.content === nudge)).toHaveLength(1);
   });

@@ -112,15 +112,14 @@ export interface OracleConfig {
   agentType?: string;
   /**
    * Wire-level tool choice for the replay ('auto' | 'required' | 'none'). Default: 'auto'.
-   * 'required' forces a tool call; on providers that reject a wire-level required choice
-   * (Anthropic, Codex) it is mapped to auto and restated as a system instruction naming
-   * `completionTools`.
+   * 'required' forces a tool call and adds the requirement to each step's closing reminder; on
+   * providers that reject a wire-level required choice (Anthropic, Codex) it is mapped to auto.
    */
   toolChoice?: 'auto' | 'required' | 'none';
   /**
    * Tool names whose successful call ends the replay turn. Default: the strategist decision tools
-   * ['set-strategy', 'set-flavors', 'keep-status-quo']. Consumed by the required-tool-choice
-   * instruction, the continuation nudge, stopCheck's completion-tools mode, and Rationale
+   * ['set-strategy', 'set-flavors', 'keep-status-quo']. Consumed by the completion-tool
+   * instruction on Anthropic and Codex, the continuation nudge, stopCheck's completion-tools mode, and Rationale
    * extraction in getOutput.
    */
   completionTools?: string[];
@@ -149,8 +148,10 @@ export interface OracleConfig {
 
 /** Parameters passed to OracleAgent per execution */
 export interface OracleParameters extends AgentParameters {
-  /** Tool names from the original span */
+  /** Tool names declared for the replay (the original run's, unless modifyPrompt overrides them) */
   activeTools: string[];
+  /** The original run's per-step tool lists; tools it removed by a step are removed on that replay step */
+  stepTools: string[][];
   /** Model to use (original or overridden) */
   resolvedModel: Model;
   /** Agent type being replayed -- controls stop behavior */
@@ -217,8 +218,10 @@ export interface ExtractedPrompt {
   system: string[];
   /** Non-system messages */
   messages: ModelMessage[];
-  /** Tool names from step.tools */
+  /** Tool names from the first step's step.tools: the run's declared list */
   activeTools: string[];
+  /** Each recorded step's step.tools (index 0 is the first step), for replaying tools removed mid-run */
+  stepTools: string[][];
   /** Original model string from span attributes */
   modelString: string;
   /** Agent name (e.g. 'simple-strategist') */
@@ -243,6 +246,8 @@ export interface RetrievedRow {
   messages: ModelMessage[];
   /** Tool names from the original span */
   activeTools: string[];
+  /** Each recorded step's tool list (see ExtractedPrompt.stepTools); absent in older retrieval caches */
+  stepTools?: string[][];
   /** The original turn's framing from step.tool_framing (undefined when unrecorded — see OriginalPromptContext.framing) */
   framing?: ToolCallFraming;
   /** Set when extraction failed for this row */

@@ -19,6 +19,11 @@
  * string needs a small partial-JSON decode. That decode is synchronous on purpose: `concurrency.ts`
  * does **not** await `onChunk`, so async work here would race chunk ordering. The schema's single
  * `Message` string field makes the field unambiguous and first.
+ *
+ * This streams `send-message` arguments before the SDK validates the call. A step that narrows its
+ * tools keeps removed tools declared and rejects their calls only after parsing (see
+ * utils/tools/tool-availability.ts), so this assumes no agent narrows `send-message` out, which is
+ * true of every current narrowing.
  */
 
 import { sendMessageToolName } from "../diplomacy/constants.js";

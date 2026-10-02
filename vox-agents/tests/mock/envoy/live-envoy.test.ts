@@ -5,7 +5,7 @@
  * or protected; we reach them through a loosely-typed handle (as in diplomat-prompts.test.ts).
  *
  * Covered: getInitialMessages (shared game context, special-message filtering, normal-mode
- * hint append, special-mode prompt append by reference), prepareStep (clears tools in special
+ * hint append, special-mode prompt append by reference), getRunTools (restricts tools in special
  * mode), and getExtraTools (exposes get-briefing). Identity/context derive from the typed
  * parameters; buildGameContextMessages requires a seeded game state near parameters.turn.
  */
@@ -223,25 +223,33 @@ describe('speakerLabel', () => {
   });
 });
 
-describe('LiveEnvoy.prepareStep', () => {
-  it('restricts active tools to send-message in special (greeting) mode', async () => {
+describe('LiveEnvoy.getRunTools', () => {
+  it('declares only send-message for a special (greeting) run', async () => {
     const params = liveParams();
     const input = thread({ messages: [greetingMessage()] });
     const ctx = createFakeVoxContext().asContext();
 
     // With the tool force honored on the deployed model an empty set would be uncompliable; the
     // greeting speaks through send-message like any other reply.
-    const config = await spokesperson.prepareStep(params, input, null, [], [], ctx);
-    expect(config.activeTools).toEqual(['send-message']);
+    expect(await spokesperson.getRunTools(params, input, ctx)).toEqual(['send-message']);
   });
 
-  it('does not restrict active tools in normal mode', async () => {
+  it('declares the full tool list in normal mode', async () => {
     const params = liveParams();
     const input = thread({ messages: [textMessage('hello')] });
     const ctx = createFakeVoxContext().asContext();
 
-    const config = await spokesperson.prepareStep(params, input, null, [], [], ctx);
-    expect(config.activeTools).not.toEqual(['send-message']);
+    expect(await spokesperson.getRunTools(params, input, ctx)).toEqual(spokesperson.getActiveTools(params));
+  });
+
+  it('applies the special-mode restriction to subclasses with their own tool list', async () => {
+    const diplomat = agentRegistry.get('diplomat') as any;
+    const params = liveParams();
+    const ctx = createFakeVoxContext().asContext();
+
+    expect(await diplomat.getRunTools(params, thread({ messages: [greetingMessage()] }), ctx)).toEqual(['send-message']);
+    expect(await diplomat.getRunTools(params, thread({ messages: [textMessage('hello')] }), ctx))
+      .toEqual(diplomat.getActiveTools(params));
   });
 });
 

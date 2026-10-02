@@ -83,7 +83,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
    * reads before it acts — in both modes; an add-on follows it — the special message's prompt in
    * special mode, or the agent's default nudge in normal mode. In normal mode the agent's grounding
    * brackets the conversation and its deal rows render inline — both assembled together by
-   * {@link getExtraContext}. Special mode skips history (and disables tools via prepareStep).
+   * {@link getExtraContext}. Special mode skips history (and restricts tools via getRunTools).
    */
   public async getInitialMessages(
     parameters: StrategistParameters,
@@ -241,28 +241,18 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
   }
 
   /**
-   * Restricts special message mode (e.g., greetings) to the send-message tool only. With the tool
+   * Restricts a special message run (e.g., a greeting) to the send-message tool only. With the tool
    * force honored on the deployed model an empty tool set would be uncompliable, so the greeting is
-   * itself a send-message call streamed back as text — one path for all spoken output.
-   *
-   * No cache-breakpoint work here: the breakpoints are set once in getInitialMessages and anchored
-   * only on committed rows (see the prompt-cache breakpoint strategy note in envoy.ts), so a step's
-   * transient tool traffic — which is collapsed at commit or rolled back on failure — is never a
-   * cache anchor.
+   * itself a send-message call streamed back as text — one path for all spoken output. Resolved for
+   * the whole run, so the model is only ever shown the tool it may use.
    */
-  public override async prepareStep(
+  public override async getRunTools(
     parameters: StrategistParameters,
     input: EnvoyThread,
-    lastStep: StepResult<Record<string, Tool>> | null,
-    allSteps: StepResult<Record<string, Tool>>[],
-    messages: ModelMessage[],
     context: VoxContext<StrategistParameters>
-  ) {
-    const config = await super.prepareStep(parameters, input, lastStep, allSteps, messages, context);
-    if (this.isSpecialMode(input)) {
-      config.activeTools = ["send-message"];
-    }
-    return config;
+  ): Promise<string[] | undefined> {
+    if (this.isSpecialMode(input)) return ["send-message"];
+    return super.getRunTools(parameters, input, context);
   }
 
   // Game context assembly

@@ -85,8 +85,20 @@ describe('streamTextWithConcurrency batch guard', () => {
     const result = await streamTextWithConcurrency(params, fakeContext);
 
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
-    expect(mocks.convertToStepResult).toHaveBeenCalledWith({ id: 'chat-completion' });
+    expect(mocks.convertToStepResult).toHaveBeenCalledWith({ id: 'chat-completion' }, undefined);
     expect(result).toEqual({ steps: ['converted', { id: 'chat-completion' }] });
+  });
+
+  it('applies the step tool-input hooks while converting a batch response', async () => {
+    const rejections = { b: () => { throw new Error('removed'); } };
+    const params = withModelConfig(
+      { model: {} as any, messages: [], experimental_refineToolInput: rejections } as any,
+      { provider: 'openai', name: 'gpt-5', options: {} } as any
+    );
+
+    await streamTextWithConcurrency(params, fakeContext);
+
+    expect(mocks.convertToStepResult).toHaveBeenLastCalledWith({ id: 'chat-completion' }, rejections);
   });
 });
 

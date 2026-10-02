@@ -13,7 +13,7 @@ import {
 } from '../../../../src/utils/models/providers/host-capability-prompt.js';
 import { hostWorkspaceGuideFiles } from '../../../../src/utils/models/providers/host-tools.js';
 import {
-  requiredToolChoiceInstruction,
+  completionToolsInstruction,
   requiredToolChoiceMiddleware,
 } from '../../../../src/utils/models/providers/required-tool-choice.js';
 
@@ -105,7 +105,7 @@ describe('hostCapabilityMiddleware', () => {
     expect(out).toBe(params);
   });
 
-  it('keeps the Codex host reminder ahead of its required-tool instruction', async () => {
+  it('keeps the Codex host reminder ahead of its completion-tool instruction', async () => {
     const access = { read: true, write: false, web: false };
     const recorder = recordingModel();
     const model = wrapLanguageModel({
@@ -128,10 +128,10 @@ describe('hostCapabilityMiddleware', () => {
 
     const system = (recorder as any).doGenerateCalls.at(-1).prompt[0].content as string;
     const hostInstruction = hostCapabilityInstruction('codex', access, ['found_city'])!;
-    const requiredInstruction = requiredToolChoiceInstruction(['found_city', 'get_briefing'], ['found_city'], false)!;
+    const completionInstruction = completionToolsInstruction(['found_city', 'get_briefing'], ['found_city'], false)!;
     expect(system).toContain(hostInstruction);
-    expect(system).toContain(requiredInstruction);
+    expect(system).toContain(completionInstruction);
     expect(system).not.toContain('inactive_tool');
-    expect(system.indexOf(hostInstruction)).toBeLessThan(system.indexOf(requiredInstruction));
+    expect(system.indexOf(hostInstruction)).toBeLessThan(system.indexOf(completionInstruction));
   });
 });

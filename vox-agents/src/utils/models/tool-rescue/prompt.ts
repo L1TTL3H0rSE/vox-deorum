@@ -111,16 +111,9 @@ You must use one or more ${noun}s from the list below. Respond ONLY with a JSON 
 ${listHeading}
 ${descriptions}`;
       }
-      return `${heading}
-You must use one or more ${noun}s from the list below. Respond ONLY with a JSON array in this exact format:
-\`\`\`json
-[
-  { "${noun}": "<${noun}_name>", "arguments": { <parameters> } },
-]
-\`\`\`
-
-${listHeading}
-${descriptions}`;
+      // Otherwise the same text as auto: whether the step must call is said by the agent loop's
+      // closing reminder, so dropping to auto (all tools removed) keeps this prompt and its cache.
+      return createAutoToolPrompt(heading, listHeading, noun, descriptions);
     case "tool":
       return `${heading}
 You must use the ${noun} defined below. Respond ONLY with a JSON object in this exact format:
@@ -131,8 +124,17 @@ ${descriptions}`;
       return undefined;
 
     default:
-      return `${heading}
-You have access to ${noun}s. If you decide to invoke any of the ${noun}(s), ONLY respond with a JSON array in this EXACT format as the text output:
+      return createAutoToolPrompt(heading, listHeading, noun, descriptions);
+  }
+}
+
+/**
+ * The tool instruction shared by the auto and the unwrapped required choice: how to write a call,
+ * then the tool list. It never says whether a call is required.
+ */
+function createAutoToolPrompt(heading: string, listHeading: string, noun: string, descriptions: string): string {
+  return `${heading}
+You have access to ${noun}s. To use any of the ${noun}s, ONLY respond with a JSON array in this EXACT format as the text output:
 \`\`\`json
 [
   { "${noun}": "<${noun}_name>", "arguments": { <parameters> } },
@@ -141,7 +143,6 @@ You have access to ${noun}s. If you decide to invoke any of the ${noun}(s), ONLY
 
 ${listHeading}
 ${descriptions}`;
-  }
 }
 
 /**

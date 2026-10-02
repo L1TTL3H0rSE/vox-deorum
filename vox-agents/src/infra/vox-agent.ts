@@ -14,7 +14,7 @@ import type { VoxContext } from "./vox-context.js";
 import type { ExecuteTokenOutput } from "./vox-run.js";
 import { getModelConfig, type ModelSize, resolveToolFraming, selectModelReference } from "../utils/models/models.js";
 import { getValidCalls, hasOnlyTerminalCalls, isTerminalTool } from "../utils/tools/terminal-tools.js";
-import { buildCompletionToolsNudge } from "../utils/tools/tool-names.js";
+import { buildClosingReminder } from "../utils/tools/tool-names.js";
 import { buildRescuePrompt } from "../utils/models/text-cleaning.js";
 import { appendReminder } from "../utils/prompts/reminders.js";
 // @ts-expect-error - jaison doesn't have type definitions
@@ -53,6 +53,8 @@ export interface PreparedAgentState {
   system: string;
   /** Initial conversation messages, excluding the system prompt. */
   messages: ModelMessage[];
+  /** Tools declared for this run ({@link VoxAgent.getRunTools}), or undefined for all registered tools. */
+  tools: string[] | undefined;
 }
 
 /**
@@ -172,20 +174,21 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   public completionTools?: string[];
 
   /**
-   * Reminder injected as a user message when the loop continues past the first step, nudging the
-   * model to finalize. The default derives from {@link completionTools} (so any agent that declares
-   * them gets a sensible nudge for free) intersected with `activeTools` — the set this step actually
-   * offers, which `VoxContext` resolves after {@link prepareStep} — so the reminder never names a
-   * tool the model cannot call. An empty intersection yields undefined, as does returning undefined
-   * outright to disable the nudge (e.g. replay agents that must not perturb the reproduced prompt).
+   * The single closing reminder appended as the last user message of a step, after
+   * {@link prepareStep} has resolved the tools this step may run (`executable`). When the step's
+   * tool choice is `required`, it says the model must call tools; this lives here, not in provider
+   * middleware, so the system text stays the same when a step drops to auto. When the step is
+   * `narrowed` (some of the run's tools were removed but stay declared), it names the allowed tools
+   * and says other calls will error. From the second step on it also
+   * nudges the model to finalize with the {@link completionTools} that are allowed, so it never names
+   * a tool the model cannot run. Return undefined to add nothing (e.g. a replay agent that must not
+   * perturb the reproduced prompt).
    */
   public continuationNudge(
     _parameters: TParameters,
-    activeTools: string[],
+    step: { executable: string[]; narrowed: boolean; step: number; required: boolean },
   ): string | undefined {
-    if (!this.completionTools?.length) return undefined;
-    const active = new Set(activeTools);
-    return buildCompletionToolsNudge(this.completionTools.filter(toolName => active.has(toolName)));
+    return buildClosingReminder(step.executable, this.completionTools, step);
   }
 
   /**
@@ -278,14 +281,32 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   public abstract getSystem(parameters: TParameters, _input: TInput, _context: VoxContext<TParameters>): Promise<string>;
   
   /**
-   * Gets the list of active tools for this agent execution.
-   * Returns the tool names that should be available to the model.
-   * 
+   * Gets this agent's full tool list. {@link getRunTools} picks one run's tools from it.
+   *
    * @param parameters - The execution parameters
-   * @returns Array of tool names that should be active, or undefined for all tools
+   * @returns Array of tool names, or undefined for all registered tools
    */
   public getActiveTools(_parameters: TParameters): string[] | undefined {
     return [];
+  }
+
+  /**
+   * Gets the tools declared to the model for one run, resolved once before the first step. Defaults
+   * to {@link getActiveTools}; override to restrict a whole run by its input (e.g. a special message
+   * that may only be answered by speaking). The list never changes within the run, so the cached
+   * prompt prefix stays the same across steps.
+   *
+   * @param parameters - The execution parameters
+   * @param input - The agent input for this execution
+   * @param context - The VoxContext for this execution
+   * @returns Array of tool names to declare, or undefined for all registered tools
+   */
+  public async getRunTools(
+    parameters: TParameters,
+    _input: TInput,
+    _context: VoxContext<TParameters>
+  ): Promise<string[] | undefined> {
+    return this.getActiveTools(parameters);
   }
   
   /**
@@ -449,6 +470,13 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   /**
    * Prepares the next step in the agent execution.
    * Allows dynamic modification of the execution context for each step.
+   *
+   * A returned `activeTools` may only remove tools from the run's declared list ({@link getRunTools})
+   * after an earlier step ran, such as closing a quota; an agent never adds tools mid-run, and a
+   * restriction known before the first step belongs in getRunTools. Removed tools stay declared to the
+   * model; a call to one returns an error without executing, and the closing reminder
+   * ({@link continuationNudge}) names the tools available for the step. Telemetry and Oracle rely on
+   * this: the first step's `step.tools` is the run's declared list.
    *
    * @param parameters - The execution parameters
    * @param lastStep - The most recent step result

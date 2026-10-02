@@ -16,7 +16,7 @@ import { createLogger } from '../logger.js';
 import { isHostCapabilityProvider } from './providers/host-tools.js';
 import type { Model } from '../../types/index.js';
 import { hasBatchManager, getBatchManager } from '../../oracle/batch/batch-manager.js';
-import { convertToStepResult } from '../../oracle/batch/format-converter.js';
+import { convertToStepResult, type RefineToolInput } from '../../oracle/batch/format-converter.js';
 import { takePreservedModelError } from './preserved-model-error.js';
 import { getCodexExecutionTimeout } from './providers/codex-proxy.js';
 
@@ -146,7 +146,9 @@ export async function streamTextWithConcurrency<T extends Parameters<typeof stre
       );
     }
     const response = await getBatchManager().enqueue(params, modelConfig);
-    return convertToStepResult(response);
+    // The SDK never runs here, so its tool-input hooks (which reject tools removed for the step)
+    // are applied while converting the response.
+    return convertToStepResult(response, params.experimental_refineToolInput as RefineToolInput | undefined);
   }
 
   // If we don't have the config, use a default limiter

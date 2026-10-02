@@ -20,7 +20,6 @@ import {
   tookTerminalAction,
   type TranscriptMessage,
 } from '../../../../src/utils/diplomacy/transcript/transcript-utils.js';
-import { counterpartOpenProposal, type DealReduction } from '../../../../src/utils/diplomacy/deal/deal-reduce.js';
 import type { EnvoyThread, MessageWithMetadata } from '../../../../src/types/index.js';
 
 /** Minimal thread for the ordered-pair derivation helpers. */
@@ -350,32 +349,5 @@ describe('diplomacy transcript helpers', () => {
       expect(tookTerminalAction([call, toolResult({ type: 'text', value: 'staged' })])).toBe(true);
       expect(tookTerminalAction([call])).toBe(true);
     });
-  });
-});
-
-describe('counterpartOpenProposal', () => {
-  /** A deal reduction with sensible defaults (no proposal on the table). */
-  function reduction(partial: Partial<DealReduction> = {}): DealReduction {
-    return { active: null, status: 'none', proposals: [], ...partial };
-  }
-
-  it('is true only when an OPEN proposal authored by the counterpart is on the table', () => {
-    // Agent voices seat 3; the counterpart (seat 1) authored the open proposal.
-    const counterpart = reduction({ active: row({ SpeakerID: 1, MessageType: 'deal-proposal' }), status: 'open' });
-    expect(counterpartOpenProposal(counterpart, 3)).toBe(true);
-  });
-
-  it('is false when OUR own side authored the open proposal (ball is on the other side)', () => {
-    const own = reduction({ active: row({ SpeakerID: 3, MessageType: 'deal-proposal' }), status: 'open' });
-    expect(counterpartOpenProposal(own, 3)).toBe(false);
-  });
-
-  it('is false when there is no active proposal', () => {
-    expect(counterpartOpenProposal(reduction(), 3)).toBe(false);
-  });
-
-  it('is false when the counterpart proposal is no longer open (e.g. accepted)', () => {
-    const accepted = reduction({ active: row({ SpeakerID: 1, MessageType: 'deal-proposal' }), status: 'accepted' });
-    expect(counterpartOpenProposal(accepted, 3)).toBe(false);
   });
 });

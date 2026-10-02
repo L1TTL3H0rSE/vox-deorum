@@ -147,12 +147,22 @@ export async function extractPrompt(
     }
   }
 
-  // Parse tools
+  // Parse tools. step.tools is what may run on a step, and tools are only ever removed after a step
+  // ran, so the first step's list is the run's declared list.
   const rawTools = parseJson(stepAttrs['step.tools']);
   const activeTools: string[] = Array.isArray(rawTools) ? rawTools : [];
   if (activeTools.length == 0) {
     logger.warn(`Failed to parse active tools for agent ${agentName} at turn ${turn}`);
   }
+
+  // Per-step tool lists of the same run (later executions of the agent in this turn are excluded).
+  // A step without a parsable list removed nothing, so it records the declared list.
+  const stepTools = stepSpans
+    .filter(span => span.parentSpanId === firstStep.parentSpanId)
+    .map(span => {
+      const tools = parseJson(parseSpanAttributes(span)['step.tools']);
+      return Array.isArray(tools) ? tools as string[] : activeTools;
+    });
 
   // Use model from step span if not on agent span
   const stepModel = stepAttrs['model'] as string || '';
@@ -166,6 +176,7 @@ export async function extractPrompt(
     system,
     messages,
     activeTools,
+    stepTools,
     modelString: finalModelString,
     agentName,
     framing,

@@ -15,7 +15,7 @@ The framework has a small core (an agent base class, an execution context, and a
 | [Oracle](oracle.md) | Replays past turns with modified prompts or different models for "what-if" experiments. |
 | [Archivist](archivist.md) | Batch-processes finished games into an episode database that strategists learn from. |
 
-The [web UI](ui.md), [media pipeline](media.md), and [observability](observability.md) pages cover the dashboard, OBS capture and video generation, and tracing and logging.
+The [web UI](ui.md), [media pipeline](media.md), and [observability](observability.md) pages cover the dashboard, OBS capture and video generation, and tracing and logging. [Prompts and tool calling](prompts.md) explains how a model request is built and where to edit each part of it.
 
 ## VoxAgent: the base class
 
@@ -30,13 +30,16 @@ The main hooks, in the order they matter:
 | `triage()` | Optionally evaluates the prepared prompt to choose a model tier. Its decision is available through `context.currentTriage`. |
 | `getModel()` | Chooses the model using the supplied tier or the agent's `modelSize`. Resolves per-agent and tier mappings in `config.json`. |
 | `executeEvaluation()` | When implemented, evaluates prepared state and processes answers in place of the chat loop. |
-| `getActiveTools()` | Names the tools the model may call this step. |
+| `getActiveTools()` | Names the agent's full tool list. |
+| `getRunTools()` | Picks the tools declared for one run, once before the first step. Defaults to `getActiveTools()`. Envoys and telepathists restrict special-message runs here. |
 | `getExtraTools()` | Contributes agent-specific tools beyond the shared MCP set. |
-| `prepareStep()` | Runs before each step. Can prune messages or switch models mid-run. |
+| `prepareStep()` | Runs before each step. Can prune messages, switch models mid-run, or remove tools after an earlier step ran. It never adds tools. |
 | `stopCheck()` | Decides after each step whether the loop is done. |
 | `getOutput()` / `postprocessOutput()` | Turn the final exchange into a typed result, optionally validated against a Zod schema. |
 
-Most agents declare `completionTools` to control stopping. The loop ends once one of those tools has been called successfully (a strategist stops after `set-strategy` or `keep-status-quo`, for example), with a maximum step count as a backstop. Some providers (Anthropic, Codex) reject a wire-level forced tool choice, which is why the required-tool-choice instruction exists. That instruction and the continuation nudge both name only the completion tools that remain active on the next step, so neither recommends a tool the model cannot call.
+Most agents declare `completionTools` to control stopping. The loop ends once one of those tools has been called successfully (a strategist stops after `set-strategy` or `keep-status-quo`, for example), with a maximum step count as a backstop. Some providers (Anthropic, Codex) reject a wire-level forced tool choice, so their middleware switches it to `auto` and the step's closing reminder states the requirement, for every provider. The middleware's own sentence names the completion tools from the run's declared tools and does not depend on the tool choice.
+
+Removing a tool mid-run does not remove its definition from the request. A call to a removed tool comes back as an error, and a closing reminder at the end of the request names what may run. [prompts.md](prompts.md) covers how a request is assembled across hooks, the step loop, and model middleware, and where each piece of prompt text lives.
 
 Two flags change the execution shape entirely:
 

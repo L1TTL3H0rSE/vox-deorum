@@ -372,6 +372,32 @@ describe('oracle prompt-extractor', () => {
       expect(result!.activeTools).toEqual(['set-flavors', 'set-strategy', 'keep-status-quo']);
     });
 
+    it('collects per-step tool lists from the first run only', async () => {
+      const { agentId } = await seedTurn({
+        turn: 14,
+        traceId: 'steps',
+        startTime: 1000,
+        stepAttrs: {
+          'step.messages': JSON.stringify([{ role: 'system', content: 'S' }, { role: 'user', content: 'u' }]),
+          'step.tools': JSON.stringify(['a', 'b']),
+        },
+      });
+      // A later step of the same run removed b; a step without a list removed nothing.
+      await insertSpan({ turn: 14, traceId: 'steps', spanId: 'steps-step2', parentSpanId: agentId,
+        name: 'ai.streamText.doStream', startTime: 1010, attributes: { 'step.tools': JSON.stringify(['a']) } });
+      await insertSpan({ turn: 14, traceId: 'steps', spanId: 'steps-step3', parentSpanId: agentId,
+        name: 'ai.streamText.doStream', startTime: 1020, attributes: {} });
+      // A second execution of the agent in the same turn is a different run.
+      await insertSpan({ turn: 14, traceId: 'steps', spanId: 'steps-agent2', parentSpanId: 'steps-root',
+        name: 'agent.simple-strategist', startTime: 1030 });
+      await insertSpan({ turn: 14, traceId: 'steps', spanId: 'steps-agent2-step', parentSpanId: 'steps-agent2',
+        name: 'ai.streamText.doStream', startTime: 1040, attributes: { 'step.tools': JSON.stringify(['z']) } });
+
+      const result = await extractPrompt(db, 14);
+      expect(result!.activeTools).toEqual(['a', 'b']);
+      expect(result!.stepTools).toEqual([['a', 'b'], ['a'], ['a', 'b']]);
+    });
+
     it('reads the model from the agent span attributes', async () => {
       await seedTurn({
         turn: 12,

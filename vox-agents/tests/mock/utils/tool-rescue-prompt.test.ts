@@ -1,9 +1,9 @@
 /**
  * Mock-tier unit tests for the tool-rescue prompt shaping (`prompt.ts`).
  *
- * `createToolPrompts`: the three instruction branches (required / tool / auto)
- * under both the default `'tool'` framing and the claude-code `'action'` framing,
- * plus the `'none'` short-circuit. The default-framing assertions pin the wording
+ * `createToolPrompts`: the instruction branches (auto, which unwrapped required
+ * shares, tool, and wrapped required) under both the default `'tool'` framing and
+ * the claude-code `'action'` framing, plus the `'none'` short-circuit. The default-framing assertions pin the wording
  * the ~15 prompt-mode models depend on; the action-framing assertions pin the
  * reframed terminology and JSON key.
  *
@@ -77,12 +77,12 @@ describe('createToolPrompts', () => {
       expect(out).toContain('### send_message');
     });
 
-    it('mandates one-or-more for the required branch', () => {
+    it('gives the unwrapped required branch the same text as auto', () => {
+      // The requirement is the agent loop's closing reminder, so a step that drops to auto keeps
+      // this prompt (and its cached prefix).
       const out = createToolPrompts(tools, { type: 'required' })!;
-      expect(out).toContain('## Tool Calling');
-      expect(out).toMatch(/You must use one or more tools/);
+      expect(out).toBe(createToolPrompts(tools, { type: 'auto' }));
       // Unwrapped by default: teaches a bare array, never the wrapper object.
-      expect(out).toMatch(/Respond ONLY with a JSON array/);
       expect(out).not.toMatch(/"tools":\s*\[/);
     });
 
@@ -104,11 +104,9 @@ describe('createToolPrompts', () => {
       expect(out).toMatch(/You have access to actions/);
     });
 
-    it('uses Action wording for the required branch', () => {
+    it('gives the unwrapped required branch the same Action text as auto', () => {
       const out = createToolPrompts(tools, { type: 'required' }, 'action')!;
-      expect(out).toContain('## Action Calling');
-      expect(out).toContain('## Available Actions');
-      expect(out).toMatch(/You must use one or more actions/);
+      expect(out).toBe(createToolPrompts(tools, { type: 'auto' }, 'action'));
       expect(out).toContain('{ "action": "<action_name>", "arguments": { <parameters> } }');
     });
 

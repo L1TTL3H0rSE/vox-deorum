@@ -162,6 +162,7 @@ async function retrieveRow(
         system: extracted.system,
         messages: extracted.messages,
         activeTools: extracted.activeTools,
+        stepTools: extracted.stepTools,
         framing: extracted.framing,
       };
     } finally {

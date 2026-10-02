@@ -6,7 +6,7 @@
  * to the analyst for assessment via the call-analyst agent-tool.
  */
 
-import { ModelMessage, StepResult, Tool } from "ai";
+import { Tool } from "ai";
 import type { Experimental_EvaluationQuestion as EvaluationQuestion, Experimental_EvaluationResult as EvaluationResult } from 'ai';
 import { LiveEnvoy, type LiveEnvoyContext } from "../live-envoy.js";
 import { VoxContext } from "../../infra/vox-context.js";
@@ -17,7 +17,6 @@ import { createCloseConversationTool } from "../tools/close-conversation-tool.js
 import { buildDealContextMessage, renderDealRowInline, type DiplomatDealContext } from "../context/diplomat-utils.js";
 import { buildDiplomacyBackgroundMessage } from "../context/diplomacy-context.js";
 import { readActiveProposal } from "../../utils/diplomacy/deal/deal.js";
-import { counterpartOpenProposal } from "../../utils/diplomacy/deal/deal-reduce.js";
 import { terminalActionTools, type DealRowRenderer } from "../../utils/diplomacy/transcript/transcript-utils.js";
 import { createTriage, TriageShortcut } from "../../infra/triage.js";
 import type { TriageDecision } from "../../infra/vox-agent.js";
@@ -108,7 +107,7 @@ export class Diplomat extends LiveEnvoy {
   /**
    * The diplomat only operates inside a civ↔civ diplomacy conversation. The invariant is guaranteed
    * at the `VoxContext.execute` boundary (which rejects it unless the input is a diplomacy thread),
-   * so the `prepareStep`/`getInitialMessages` deal-state reads below can assume a counterpart exists;
+   * so the `getInitialMessages` deal-state reads below can assume a counterpart exists;
    * the web chat route, the telepathist CLI, and the chat dialog (which forces the Diplomacy form,
    * never the regular Observer panel) each reject or steer it away up front.
    */
@@ -141,43 +140,8 @@ export class Diplomat extends LiveEnvoy {
   }
 
   /**
-   * When a deal authored by the **counterpart** is open on the table, the ball is in the diplomat's
-   * court, so it is restricted to call-negotiator + send-message — it must either hand the proposal
-   * to the negotiator or reply, never wander off into briefings/analyst calls. The gate reads the
-   * **authoritative durable reduction** (`readActiveProposal`, the same source the negotiator and the
-   * accept/reject routes use), NOT the best-effort in-memory cache, so a stale `open` left by a
-   * disconnect on an accept/reject can never wrongly keep restricting the next turn. A proposal our
-   * own side authored leaves the ball with the other side and does not restrict us.
-   *
-   * Special-message (greeting) mode is already restricted to send-message by LiveEnvoy, so the gate
-   * is skipped there.
-   */
-  public override async prepareStep(
-    parameters: StrategistParameters,
-    input: EnvoyThread,
-    lastStep: StepResult<Record<string, Tool>> | null,
-    allSteps: StepResult<Record<string, Tool>>[],
-    messages: ModelMessage[],
-    context: VoxContext<StrategistParameters>
-  ) {
-    const config = await super.prepareStep(parameters, input, lastStep, allSteps, messages, context);
-    if (lastStep === null && !this.isSpecialMode(input)) {
-      // Diplomacy turn, first step: gate on the execution's shared deal reduction. The counterpart cannot
-      // act mid-turn (the per-thread lock), so the gate state is fixed for the whole turn; and when the gate
-      // IS active it restricts to call-negotiator + send-message, both of which end the turn — so there
-      // is never a later step to re-restrict.
-      const reduction = await this.readDealReduction(input, context);
-      if (counterpartOpenProposal(reduction, input.agent)) {
-        config.activeTools = ["call-negotiator", "send-message"];
-      }
-    }
-    return config;
-  }
-
-  /**
    * Read the authoritative durable deal reduction (`readActiveProposal`, the same source the negotiator
-   * and the accept/reject routes use) once per diplomat execution. The grounding context and the
-   * first-step gate both run before any tool call, so they share one MCP round trip.
+   * and the accept/reject routes use) once per diplomat execution.
    */
   private readDealReduction(input: EnvoyThread, context: VoxContext<StrategistParameters>) {
     return context.memoizeForExecution("diplomat.deal-reduction", () =>
@@ -203,8 +167,8 @@ export class Diplomat extends LiveEnvoy {
    * inline at their proposal turn via the `dealRenderer` (see {@link renderDealRowInline}). See
    * {@link LiveEnvoyContext} for how the base layers these sections around the chat record.
    *
-   * The deal transcript comes from the execution's shared authoritative reduction ({@link readDealReduction},
-   * the same one `prepareStep`'s gate uses). The optional on-the-table
+   * The deal transcript comes from the execution's shared authoritative reduction ({@link readDealReduction}).
+   * The optional on-the-table
    * block and the renderer's open-proposal pointer both derive from that single reduction, and the pointer
    * keys off the block actually being emitted, so they can never disagree about which proposal is open.
    * (Reducing the in-memory `input.messages` instead risked pointing at a block that was never emitted.)

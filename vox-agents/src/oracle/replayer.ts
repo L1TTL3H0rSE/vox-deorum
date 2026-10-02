@@ -316,6 +316,7 @@ async function replaySingleRow(
     gameID: gameId,
     turn,
     activeTools: finalActiveTools,
+    stepTools: retrieved.stepTools ?? [],
     resolvedModel,
     agentType: retrieved.agentType,
     capturedSteps: [],

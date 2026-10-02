@@ -1,9 +1,9 @@
 /**
  * Tests for the shared required-tool-choice middleware: the wire-level conversion to auto, the
- * preserved requirement instruction, and the getModel wiring for Anthropic (direct and Claude on
- * Vertex). The Codex wiring is covered end-to-end in codex.test.ts.
+ * completion-tool instruction (the same for auto and required), and the getModel wiring for
+ * Anthropic (direct and Claude on Vertex). The Codex wiring is covered end-to-end in codex.test.ts.
  *
- * The assertions compose against the exported `requiredToolChoiceInstruction` builder and check
+ * The assertions compose against the exported `completionToolsInstruction` builder and check
  * structural properties (which names appear, whether a clause is present at all) rather than the
  * wording itself, so the injected prose can be edited without rewriting these tests.
  */
@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
 import {
   requiredToolChoiceMiddleware,
-  requiredToolChoiceInstruction,
+  completionToolsInstruction,
 } from '../../../../src/utils/models/providers/required-tool-choice.js';
 
 // Hoisted holder so the (hoisted) provider mocks can expose their created model
@@ -64,14 +64,15 @@ function requiredParams(): any {
   };
 }
 
-describe('requiredToolChoiceInstruction', () => {
-  it('yields nothing when no client tool is declared', () => {
-    expect(requiredToolChoiceInstruction([], [], false)).toBeUndefined();
-    expect(requiredToolChoiceInstruction([], ['found_city'], true)).toBeUndefined();
+describe('completionToolsInstruction', () => {
+  it('yields nothing when no declared client tool completes the turn', () => {
+    expect(completionToolsInstruction([], [], false)).toBeUndefined();
+    expect(completionToolsInstruction([], ['found_city'], true)).toBeUndefined();
+    expect(completionToolsInstruction(['get_briefing'], ['found_city'], true)).toBeUndefined();
   });
 
   it('names every completion tool and every support tool it was given', () => {
-    const instruction = requiredToolChoiceInstruction(
+    const instruction = completionToolsInstruction(
       ['found_city', 'get_briefing'], ['found_city'], false,
     )!;
     expect(instruction).toContain('`found_city`');
@@ -79,61 +80,60 @@ describe('requiredToolChoiceInstruction', () => {
   });
 
   it('drops the support clause when every declared tool completes the turn', () => {
-    const supportless = requiredToolChoiceInstruction(['found_city'], ['found_city'], false)!;
-    const withSupport = requiredToolChoiceInstruction(['found_city', 'get_briefing'], ['found_city'], false)!;
+    const supportless = completionToolsInstruction(['found_city'], ['found_city'], false)!;
+    const withSupport = completionToolsInstruction(['found_city', 'get_briefing'], ['found_city'], false)!;
     expect(supportless).not.toContain('`get_briefing`');
     expect(supportless.length).toBeLessThan(withSupport.length);
   });
 
-  it('distinguishes a step whose declared tools include no completion tool', () => {
-    const completing = requiredToolChoiceInstruction(['found_city', 'get_briefing'], ['found_city'], false)!;
-    const none = requiredToolChoiceInstruction(['found_city', 'get_briefing'], [], false)!;
-    expect(none).not.toBe(completing);
-    // Both still require a client call, so both name the declared tools.
-    expect(none).toContain('`found_city`');
-    expect(none).toContain('`get_briefing`');
+  it('never names a completion tool the request does not declare', () => {
+    const instruction = completionToolsInstruction(['found_city', 'get_briefing'], ['found_city', 'raze_city'], false)!;
+    expect(instruction).not.toContain('`raze_city`');
   });
 
   it('counts host built-in tools as support alongside the non-completion client tools', () => {
     const named = ['found_city', 'get_briefing'];
-    expect(requiredToolChoiceInstruction(named, ['found_city'], true))
-      .not.toBe(requiredToolChoiceInstruction(named, ['found_city'], false));
-    // Without a completion tool the requirement is already scoped to the client tools, which
-    // excludes the built-ins on its own, so that variant does not change with them.
-    expect(requiredToolChoiceInstruction(named, [], true))
-      .toBe(requiredToolChoiceInstruction(named, [], false));
+    expect(completionToolsInstruction(named, ['found_city'], true))
+      .not.toBe(completionToolsInstruction(named, ['found_city'], false));
   });
 });
 
 describe('requiredToolChoiceMiddleware', () => {
-  it('converts required to auto and appends the requirement to the system prompt', async () => {
+  it('converts required to auto and leaves the prompt alone without a completion tool', async () => {
     const params = requiredParams();
     const out: any = await (requiredToolChoiceMiddleware().transformParams as any)({ params });
     expect(out.toolChoice).toEqual({ type: 'auto' });
-    expect(out.prompt[0].content).toBe(
-      `Make sound strategic decisions.\n\n${requiredToolChoiceInstruction(['found_city', 'get_briefing'], [], false)}`,
-    );
+    expect(out.prompt).toBe(params.prompt);
     // The caller's params survive untouched for outer retries.
     expect(params.toolChoice).toEqual({ type: 'required' });
-    expect(params.prompt[0].content).toBe('Make sound strategic decisions.');
   });
 
   it('names the caller\'s completion tools as the ones that end the turn', async () => {
     const middleware = requiredToolChoiceMiddleware({ completionTools: ['found_city'] });
-    const out: any = await (middleware.transformParams as any)({ params: requiredParams() });
-    expect(out.prompt[0].content).toContain(
-      requiredToolChoiceInstruction(['found_city', 'get_briefing'], ['found_city'], false),
+    const params = requiredParams();
+    const out: any = await (middleware.transformParams as any)({ params });
+    expect(out.prompt[0].content).toBe(
+      `Make sound strategic decisions.\n\n${completionToolsInstruction(['found_city', 'get_briefing'], ['found_city'], false)}`,
     );
+    expect(params.prompt[0].content).toBe('Make sound strategic decisions.');
   });
 
-  it('intersects the completion tools with what the step actually declares', async () => {
-    // The agent completes through `found_city`, but this step only offers the support tool, so the
-    // instruction must not advertise a completion the model cannot call.
+  it('gives auto and required the same system text', async () => {
+    // A step whose tools were all removed drops to auto; its cached prefix must not move.
+    const middleware = requiredToolChoiceMiddleware({ completionTools: ['found_city'] });
+    const required: any = await (middleware.transformParams as any)({ params: requiredParams() });
+    const auto: any = await (middleware.transformParams as any)({ params: { ...requiredParams(), toolChoice: { type: 'auto' } } });
+    expect(auto.toolChoice).toEqual({ type: 'auto' });
+    expect(auto.prompt).toEqual(required.prompt);
+  });
+
+  it('intersects the completion tools with what the request declares', async () => {
+    // The agent completes through `found_city`, but this request only declares the support tool, so
+    // the prompt must not advertise a completion the model cannot call.
     const params = { ...requiredParams(), tools: [functionTool('get_briefing')] };
     const middleware = requiredToolChoiceMiddleware({ completionTools: ['found_city'] });
     const out: any = await (middleware.transformParams as any)({ params });
-    expect(out.prompt[0].content).toContain(requiredToolChoiceInstruction(['get_briefing'], [], false));
-    expect(out.prompt[0].content).not.toContain('`found_city`');
+    expect(out.prompt).toBe(params.prompt);
   });
 
   it('reports declared host tools to the instruction builder', async () => {
@@ -144,26 +144,20 @@ describe('requiredToolChoiceMiddleware', () => {
     const middleware = requiredToolChoiceMiddleware({ completionTools: ['found_city'] });
     const out: any = await (middleware.transformParams as any)({ params });
     expect(out.prompt[0].content).toContain(
-      requiredToolChoiceInstruction(['found_city'], ['found_city'], true),
+      completionToolsInstruction(['found_city'], ['found_city'], true),
     );
   });
 
   it('creates a leading system message when the prompt has none', async () => {
     const params = { ...requiredParams(), prompt: [{ role: 'user', content: [{ type: 'text', text: 'Go.' }] }] };
-    const out: any = await (requiredToolChoiceMiddleware().transformParams as any)({ params });
+    const middleware = requiredToolChoiceMiddleware({ completionTools: ['found_city'] });
+    const out: any = await (middleware.transformParams as any)({ params });
     expect(out.prompt).toHaveLength(2);
     expect(out.prompt[0].role).toBe('system');
-    expect(out.prompt[0].content).toBe(requiredToolChoiceInstruction(['found_city', 'get_briefing'], [], false));
+    expect(out.prompt[0].content).toBe(completionToolsInstruction(['found_city', 'get_briefing'], ['found_city'], false));
   });
 
-  it('degrades to plain auto when no client function tools are declared', async () => {
-    const params = { ...requiredParams(), tools: [] };
-    const out: any = await (requiredToolChoiceMiddleware().transformParams as any)({ params });
-    expect(out.toolChoice).toEqual({ type: 'auto' });
-    expect(out.prompt).toBe(params.prompt);
-  });
-
-  it('returns non-required params unchanged', async () => {
+  it('returns auto params without a completion tool unchanged', async () => {
     const params = { ...requiredParams(), toolChoice: { type: 'auto' } };
     const out: any = await (requiredToolChoiceMiddleware().transformParams as any)({ params });
     expect(out).toBe(params);
@@ -176,9 +170,6 @@ describe('getModel required-tool-choice wiring', () => {
     await (model as any).doGenerate({ ...requiredParams(), providerOptions: {} });
     const call = mocks.anthropic.doGenerateCalls.at(-1);
     expect(call.toolChoice).toEqual({ type: 'auto' });
-    expect(call.prompt[0].content).toContain(
-      requiredToolChoiceInstruction(['found_city', 'get_briefing'], [], false),
-    );
   });
 
   it('adapts a required tool choice for Claude on Vertex (google provider)', async () => {
@@ -186,9 +177,6 @@ describe('getModel required-tool-choice wiring', () => {
     await (model as any).doGenerate({ ...requiredParams(), providerOptions: {} });
     const call = mocks.vertexAnthropic.doGenerateCalls.at(-1);
     expect(call.toolChoice).toEqual({ type: 'auto' });
-    expect(call.prompt[0].content).toContain(
-      requiredToolChoiceInstruction(['found_city', 'get_briefing'], [], false),
-    );
   });
 
   it('forwards the agent completion tools passed by vox-context', async () => {
@@ -199,7 +187,7 @@ describe('getModel required-tool-choice wiring', () => {
     await (model as any).doGenerate({ ...requiredParams(), providerOptions: {} });
     const call = mocks.anthropic.doGenerateCalls.at(-1);
     expect(call.prompt[0].content).toContain(
-      requiredToolChoiceInstruction(['found_city', 'get_briefing'], ['found_city'], false),
+      completionToolsInstruction(['found_city', 'get_briefing'], ['found_city'], false),
     );
   });
 });

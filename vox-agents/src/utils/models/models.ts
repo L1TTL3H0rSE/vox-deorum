@@ -219,8 +219,8 @@ export function getModel(config: Model, options?: {
       break;
     }
     case "anthropic":
-      // Anthropic rejects a wire-level required tool choice; the middleware maps it to auto and
-      // restates the requirement in the system prompt, naming the agent's completion tools as the
+      // Anthropic rejects a wire-level required tool choice; the middleware maps it to auto (the
+      // closing reminder states the requirement) and names the agent's completion tools as the
       // ones that end the turn so a support call cannot read as a way to finish.
       result = wrapLanguageModel({
         model: createAnthropic()(config.name),
