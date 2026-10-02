@@ -1,6 +1,6 @@
 # just-bash workspace for all agents
 
-This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: draft for review, not implemented.
+This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Step 0 done, including the Node 22.23.3 requirement.
 
 ## Context
 
@@ -46,7 +46,7 @@ Virtual layout seen by the agent (cwd `/workspace`):
 | `/workspace/game/` | `<telemetryDir>/workspaces/games/<gameID>-player-<playerID>/` | One game, one player |
 | `/workspace/shared/<name>/` | `<telemetryDir>/workspaces/shared/<name>/` | Across games and seats |
 
-- `"read"` mounts just-bash `OverlayFs({ root, readOnly: true })`; `"write"` mounts `ReadWriteFs({ root })`. The base is an `InMemoryFs`, so `/tmp` scratch never touches disk.
+- `"read"` mounts just-bash `OverlayFs({ root, readOnly: true, mountPoint: '/' })`; `"write"` mounts `ReadWriteFs({ root })`. Roots are canonicalized with `fs.realpathSync.native` after the folder is created. The base is an `InMemoryFs`, so `/tmp` scratch never touches disk.
 - Shared names must match `^[a-z0-9][a-z0-9_-]*$`. Validation errors name the config path, like `resolveSeatTriage`.
 - Caveat to document: two seats of the same game writing one shared name can pass information to each other. Users avoid that with different names per seat or read-only access.
 
@@ -81,16 +81,36 @@ The `bash` tool is registered only when the context's `files` setting is on, and
 
 ## Steps
 
-### 0. Spike (gate for everything else)
+### 0. Spike (done)
 
-Add `just-bash` to `vox-agents` from the repo root (`npm install just-bash -w vox-agents`). In a throwaway script in the scratchpad, confirm on Windows:
+`just-bash` 3.6.0 is installed in `vox-agents` (`npm install just-bash -w vox-agents`). A throwaway script on Windows 11 checked the four questions below.
 
-1. `ReadWriteFs` and `OverlayFs` accept a Windows `root` and work under `MountableFs` mount points.
-2. Paths cannot leave a mount: `cat ../../../x`, absolute host paths, and `ln -s` to an outside target all fail or stay virtual. If any of these reach the real disk outside the root, stop and revisit the design with the user. We do not try to filter scripts ourselves.
-3. Two concurrent `exec` calls on one `Bash` instance do not interfere. If they do, create a fresh `Bash` per call over the shared `MountableFs`.
-4. An `AbortSignal` passed to `exec` stops a long script.
+**Blocker found: Node older than 22.17.0 breaks `ReadWriteFs` writes on Windows.** Every write stages a temp file, then compares `dev`/`ino` from the open handle's `stat` with a later `lstat` by path. On Node 22.12.0 to 22.16.x, Windows `lstat` returns `dev: 0` while handle `stat` returns the volume serial, so every write fails with `EACCES: replacement staging entry changed`. Node 22.17.0 and later (checked up to 22.23.3 and 24.21.0) report matching values. just-bash 3.3.0 and later all have these checks; 3.1.0 has none but lacks the newer anti-tampering fixes.
 
-Adjust Step 2 to the findings.
+| Node | `lstat` `dev` matches handle `stat` |
+| --- | --- |
+| 22.12.0 (bundled by the release installer), 22.15.1 (current dev machine), 22.16.0 | No, writes fail |
+| 22.17.0, 22.17.1, 22.18.0, 22.20.0, 22.22.0, 22.23.3, 24.21.0 | Yes |
+
+With Node 22.23.3, everything else passed:
+
+1. **Mounts.** `ReadWriteFs` and `OverlayFs` accept a canonical Windows `root` under `MountableFs` mount points. Writes, heredocs, and `ls`/`cat`/`rg`/`jq`/`sqlite3` work, and `/tmp` stays in memory. `OverlayFs` needs `mountPoint: '/'` when mounted inside `MountableFs`; without it the real files show up under `home/user/project` inside the mount.
+2. **Containment.** `..` past the mount, Windows absolute paths (`C:\...`, `C:/...`, `/C:/...`), and `cp` from a host path all report "No such file". `ln -s` fails with "Operation not permitted". A real symlink placed inside the root is not followed, and a real junction to the parent is rejected with `EACCES ... resolves outside sandbox`. `echo > game/../../x` writes to the virtual in-memory base, not the disk. Nothing reached the disk outside a root.
+3. **Concurrency.** Two concurrent `exec` calls on one `Bash` each keep their own `cd` and variables, and 200 appends from one finished intact. One shared `Bash` per workspace is fine.
+4. **Abort.** An `AbortSignal` stops a script that yields (`sleep 10` stopped after 300 ms with exit 124). A tight CPU loop never yields to the timer, so the abort does not fire; the default `maxCommandCount` limit (100,000) ends it with exit 126 in about 1 to 5 seconds.
+
+Other findings that shape Step 2:
+
+- A write to a read-only mount makes `exec` reject with an `EROFS` error instead of returning a non-zero exit code. The same happens for a write through a junction that resolves outside the root. The tool must catch rejections from `exec` and return them as `stderr` with exit code 1.
+- `python3`, `js-exec`, `curl`, and `node` are absent with default options.
+- `mv` from a writable mount to `/tmp` deletes the real file and keeps the copy in memory. That is ordinary `mv` behavior, so no special handling.
+
+**Decision: require Node 22.23.3.** Done in this step:
+
+- The `engines` field in the root, `bridge-service`, and `mcp-server` `package.json` files is `>=22.23.3`.
+- `scripts/utilities/build-installer.cmd` bundles portable Node 22.23.3 and replaces an existing `node/` folder that holds a different version.
+- `scripts/install.cmd` downloads Node 22.23.3 when no system Node is found.
+- `docs/developers/setup.md` and `docs/developers/releasing.md` name the new version.
 
 ### 1. Config types and resolution
 
@@ -110,8 +130,8 @@ Adjust Step 2 to the findings.
 
 - New `utils/workspace/player-workspace.ts`:
   - `workspaceRoot()` returns `<config.telemetryDir || 'telemetry'>/workspaces`, resolved from cwd.
-  - `class PlayerWorkspace(files, gameID, playerID)`. On first `exec` it creates the real folders, seeds guides, builds a `MountableFs` (base `InMemoryFs`, mounts per Config design), and one `Bash` with `cwd: '/workspace'`, network and Python/JS off, default limits.
-  - `exec(command, signal)` returns `{ stdout, stderr, exitCode }`, each stream capped (8,000 chars, with a `[truncated N chars]` marker).
+  - `class PlayerWorkspace(files, gameID, playerID)`. On first `exec` it checks `process.versions.node` and, below 22.17.0, returns an error result asking the user to upgrade Node instead of mounting anything. Otherwise it creates the real folders, seeds guides, builds a `MountableFs` (base `InMemoryFs`, mounts per Config design), and one `Bash` with `cwd: '/workspace'`, network and Python/JS off, default limits.
+  - `exec(command, signal)` returns `{ stdout, stderr, exitCode }`, each stream capped (8,000 chars, with a `[truncated N chars]` marker). A rejected `exec` (for example `EROFS` from a write to a read-only mount, or `EACCES` from a path that resolves outside a root) becomes `{ stdout: "", stderr: <message>, exitCode: 1 }`. Abort only stops scripts that yield; CPU-bound loops are ended by the default `maxCommandCount`.
   - Guide seeding: move the create-once logic from `seedHostWorkspaceGuide` (`flag: 'wx'`, ignore `EEXIST`, log other errors) here. Seed `AGENTS.md` at each writable mount root. The game guide keeps today's content (notes vs snapshots; observations vs inferences vs plans; current tools override stale notes; no untrusted text in the guide) minus the CLI shell-policy section. The shared guide says the folder outlives the game and is seen by other seats and games, so it holds generalized lessons and reusable references, never current-game state.
 - `VoxContext`: cache `PlayerWorkspace` instances by `gameID-playerID` so all agents of a seat share one.
 - New `utils/tools/bash-tool.ts`: `createBashTool(context)` via `createSimpleTool`. Name `bash`, input `{ Command: string }`, description listing the mounts with their access and the main commands (ls, cat, grep, rg, sed, awk, find, jq, sqlite3, tee, heredocs). Execute first checks the current execution frame's step allowance (Step 5). When closed, return `{ stdout: '', stderr: 'Workspace quota exhausted for this run.', exitCode: 1 }` without resolving the workspace or running a command. Otherwise resolve the workspace from `parameters.gameID`/`playerID` and pass `context.currentSignal()`.
@@ -203,7 +223,7 @@ Quota closure keeps the bash definition and static capability instruction unchan
 
 ## Risks and open questions
 
-- Windows behavior of the real-disk filesystems and mount containment are unverified until the spike. Containment failure blocks the plan.
+- `ReadWriteFs` writes fail on Windows with Node older than 22.17.0 (see Step 0). The repo now requires 22.23.3, but a developer or player on an older system Node still gets only an `npm` warning, so the workspace checks the version itself. Containment passed the spike on Windows.
 - Each bash call is a full model round trip, which costs latency compared with CLI-internal tools. The prompt pushes batching, and caching keeps the repeated prefix cheap. The default quota of 20 is a starting point to tune from telemetry.
 - Compaction stubs old bash output; an agent that never saved notes may re-run commands. The 75 percent reminder is the mitigation.
 - Threshold compaction rewrites tool traffic after the cache anchor, so the tail after it is re-written to cache once.

@@ -14,23 +14,32 @@ echo.
 
 set "PROJECT_ROOT=%~dp0..\.."
 
-:: Step 1: Download portable Node.js if not present
+:: Step 1: Download portable Node.js if missing or not the pinned version
+set "NODE_VERSION=22.23.3"
 echo [1/6] Checking for portable Node.js...
-if not exist "%PROJECT_ROOT%\node" (
-    echo   Downloading portable Node.js v22.12.0...
+set "BUNDLED_NODE_VERSION="
+if exist "%PROJECT_ROOT%\node\node.exe" (
+    for /f "tokens=*" %%v in ('"%PROJECT_ROOT%\node\node.exe" --version 2^>nul') do set "BUNDLED_NODE_VERSION=%%v"
+)
+if not "!BUNDLED_NODE_VERSION!"=="v%NODE_VERSION%" (
+    if exist "%PROJECT_ROOT%\node" (
+        echo   Replacing portable Node.js !BUNDLED_NODE_VERSION! with v%NODE_VERSION%...
+        rmdir /S /Q "%PROJECT_ROOT%\node"
+    )
+    echo   Downloading portable Node.js v%NODE_VERSION%...
     mkdir "%PROJECT_ROOT%\node" 2>nul
 
     :: Download Node.js
-    set "NODE_ZIP=%TEMP%\node-v22.12.0-win-x64.zip"
-    curl -L -o "!NODE_ZIP!" "https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip"
+    set "NODE_ZIP=%TEMP%\node-v%NODE_VERSION%-win-x64.zip"
+    curl -L -o "!NODE_ZIP!" "https://nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%-win-x64.zip"
 
     if exist "!NODE_ZIP!" (
         echo   Extracting Node.js...
         powershell -Command "Expand-Archive -Path '!NODE_ZIP!' -DestinationPath '%TEMP%\node-extract' -Force"
 
         :: Move extracted files
-        if exist "%TEMP%\node-extract\node-v22.12.0-win-x64" (
-            xcopy /E /I /Y "%TEMP%\node-extract\node-v22.12.0-win-x64\*" "%PROJECT_ROOT%\node\" >nul 2>&1
+        if exist "%TEMP%\node-extract\node-v%NODE_VERSION%-win-x64" (
+            xcopy /E /I /Y "%TEMP%\node-extract\node-v%NODE_VERSION%-win-x64\*" "%PROJECT_ROOT%\node\" >nul 2>&1
             rmdir /S /Q "%TEMP%\node-extract" 2>nul
             del "!NODE_ZIP!" 2>nul
             echo   [OK] Portable Node.js downloaded
@@ -41,12 +50,12 @@ if not exist "%PROJECT_ROOT%\node" (
     ) else (
         echo   [ERROR] Failed to download Node.js
         echo   Please download manually from:
-        echo   https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip
+        echo   https://nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%-win-x64.zip
         echo   And extract to: %PROJECT_ROOT%\node\
         exit /b 1
     )
 ) else (
-    echo   [OK] Portable Node.js found
+    echo   [OK] Portable Node.js v%NODE_VERSION% found
 )
 
 :: Step 2: Install ALL npm dependencies (including dev) for compilation

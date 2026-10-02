@@ -32,6 +32,6 @@
   "author": "John Chen",
   "license": "CC-BY-NC-SA-4.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.23.3"
   }
 }

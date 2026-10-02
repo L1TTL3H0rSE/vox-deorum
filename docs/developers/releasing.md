@@ -74,7 +74,7 @@ Drafting and publishing are separate steps with different rules:
 
 `scripts/utilities/build-installer.cmd` is the same script the workflow calls, and you can run it directly to test packaging without publishing anything. It needs **Inno Setup 6** installed. In order, it:
 
-1. **Fetches a portable Node.js** (v22.12.0) into `node/` if it isn't already there, so the installer can ship a self-contained runtime and no player needs system Node.
+1. **Fetches a portable Node.js** (v22.23.3) into `node/` if it is missing or holds a different version, so the installer can ship a self-contained runtime and no player needs system Node.
 2. **Installs all dependencies** from the root via npm workspaces, including dev dependencies needed to compile, plus the `vox-agents/ui` dependencies separately.
 3. **Builds everything** with `npm run build:all`, then **prunes to production dependencies** so only what's needed to run is bundled.
 4. **Uses the pre-built game DLL** already staged under `scripts/release/`. When it is missing, `scripts/install/download-dll.cmd` downloads the current default line from `scripts/vp-lines.txt` and its committed pin. The build does not verify an existing staged DLL against that pin. Stage 4 makes installer packaging consume the selected pin every time.
