@@ -58,6 +58,20 @@ describe('telemetry routes', () => {
       expect(res.body.databases[0].size).toBe(4096);
     });
 
+    it('does not list .db files from agent workspaces', async () => {
+      vi.spyOn(fs, 'mkdir').mockResolvedValue(undefined as never);
+      const readdir = vi.spyOn(fs, 'readdir').mockImplementation((async (dir: string) =>
+        dir.endsWith('workspaces')
+          ? [{ name: 'stats.db', isDirectory: () => false, isFile: () => true }]
+          : [{ name: 'workspaces', isDirectory: () => true, isFile: () => false }]) as never);
+
+      const res = await request(app).get('/api/telemetry/databases');
+
+      expect(res.status).toBe(200);
+      expect(res.body.databases).toEqual([]);
+      expect(readdir).toHaveBeenCalledTimes(1);
+    });
+
     it('returns 500 when the directory scan fails', async () => {
       vi.spyOn(fs, 'mkdir').mockResolvedValue(undefined as never);
       vi.spyOn(fs, 'readdir').mockRejectedValue(new Error('EIO'));

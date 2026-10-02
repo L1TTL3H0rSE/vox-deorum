@@ -71,7 +71,7 @@ export function workspaceNodeSupported(version: string = process.versions.node):
  * @param files - The seat's resolved files setting
  * @param gameID - The game the folder belongs to
  * @param playerID - The player the folder belongs to
- * @throws if the game ID would place the folder outside the games directory
+ * @throws if the game ID or a shared name would place a folder outside its directory
  */
 export function workspaceMounts(files: ResolvedFilesConfig, gameID: string, playerID: number): WorkspaceMount[] {
   const root = workspaceRoot();
@@ -94,6 +94,9 @@ export function workspaceMounts(files: ResolvedFilesConfig, gameID: string, play
     });
   }
   for (const [name, access] of Object.entries(files.shared)) {
+    if (name !== path.basename(name) || name.includes('..')) {
+      throw new Error(`Shared folder name ${name} cannot name a workspace folder.`);
+    }
     mounts.push({
       virtualPath: `${workspaceCwd}/shared/${name}`,
       realPath: path.join(root, 'shared', name),

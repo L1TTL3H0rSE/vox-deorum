@@ -53,20 +53,27 @@ function scriptSteps(callsPerStep: number[], results: unknown[][]) {
     const toolCalls = Array.from({ length: count }, (_, index) => ({ toolName: bashToolName, toolCallId: `s${step}-${index}` }));
     results.push(await Promise.all(toolCalls.map((call) =>
       config.tools[bashToolName].execute({ Command: 'true' }, { toolCallId: call.toolCallId, messages: [] }))));
-    return {
-      steps: [{
-        text: '',
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        response: { messages: [{ role: 'assistant', content: '' }] },
-        toolCalls,
-        toolResults: [],
-      }],
-    } as any;
+    return stepResult(toolCalls);
   });
+}
+
+/** A mocked step result that reports the given bash calls. */
+function stepResult(toolCalls: Array<{ toolName: string; toolCallId: string }>) {
+  return {
+    steps: [{
+      text: '',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      response: { messages: [{ role: 'assistant', content: '' }] },
+      toolCalls,
+      toolResults: [],
+    }],
+  } as any;
 }
 
 beforeAll(() => {
   agentRegistry.register(new BashStepAgent('bash-quota-agent', 3) as any);
+  agentRegistry.register(new BashStepAgent('bash-quota-parent', 2) as any);
+  agentRegistry.register(new BashStepAgent('bash-quota-child', 1) as any);
 });
 
 beforeEach(() => {
@@ -106,6 +113,37 @@ describe('files quota in the step loop', () => {
         await ctx.execute('bash-quota-agent', {});
       });
       expect(exec).toHaveBeenCalledTimes(2);
+    } finally {
+      exec.mockRestore();
+    }
+  });
+
+  it('should keep a closed parent closed while a nested execution runs bash', async () => {
+    const ctx = new VoxContext<StrategistParameters>({}, 'bash-quota-nested');
+    ctx.files = { game: 'write', shared: {}, quota: 1 };
+    ctx.registerAgentTools();
+    const exec = vi.spyOn(PlayerWorkspace.prototype, 'exec').mockResolvedValue({ stdout: 'ran', stderr: '', exitCode: 0 });
+    const runBash = (config: any, id: string) =>
+      config.tools[bashToolName].execute({ Command: 'true' }, { toolCallId: id, messages: [] });
+    const bash = (id: string) => [{ toolName: bashToolName, toolCallId: id }];
+    let parentAfterChild: unknown;
+    // Calls in order: parent step 1, parent step 2 (which runs the child's only step inside it).
+    const steps = [
+      async (config: any) => { await runBash(config, 'p1'); return stepResult(bash('p1')); },
+      async (config: any) => {
+        await ctx.execute('bash-quota-child', {});
+        parentAfterChild = await runBash(config, 'p2');
+        return stepResult(bash('p2'));
+      },
+      async (config: any) => { await runBash(config, 'c1'); return stepResult(bash('c1')); },
+    ];
+    let call = 0;
+    stc.mockImplementation((config: any) => steps[call++](config));
+
+    try {
+      await ctx.withRun({ parameters: makeStrategistParameters() }, () => ctx.execute('bash-quota-parent', {}));
+      expect(exec).toHaveBeenCalledTimes(2);
+      expect(parentAfterChild).toMatchObject({ stdout: '', exitCode: 1 });
     } finally {
       exec.mockRestore();
     }

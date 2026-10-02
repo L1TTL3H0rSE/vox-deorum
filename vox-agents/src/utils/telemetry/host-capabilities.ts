@@ -10,10 +10,5 @@ import { isHostCapabilityProvider, resolveHostToolCapabilities } from '../models
 export function hostCapabilityTelemetryAttributes(model: Model): Attributes {
   if (!isHostCapabilityProvider(model.provider)) return {};
   const capabilities = resolveHostToolCapabilities(model.options?.hostTools);
-  const enabled = [
-    capabilities.read ? 'read' : undefined,
-    capabilities.write ? 'write' : undefined,
-    capabilities.web ? 'web' : undefined,
-  ].filter((capability): capability is string => capability !== undefined);
-  return enabled.length > 0 ? { 'host.capability': enabled.join(', ') } : {};
+  return capabilities.web ? { 'host.capability': 'web' } : {};
 }

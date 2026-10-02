@@ -8,7 +8,7 @@
 import { type EmbeddingModel, LanguageModel, ProviderMetadata, extractReasoningMiddleware, wrapLanguageModel } from 'ai';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { config } from '../config.js';
-import type { Model, ReasoningEffort } from '../../types/index.js';
+import type { Model, ReasoningEffort, ResolvedFilesConfig } from '../../types/index.js';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -23,10 +23,9 @@ import { toolRescueMiddleware } from './tool-rescue/middleware.js';
 import { buildClaudeCodeModel } from './providers/claude-code.js';
 import { claudeCodeSystemMiddleware } from './providers/claude-code-prompt.js';
 import { buildCodexModel, buildCodexProviderOptions } from './providers/codex.js';
-import { hostCapabilityMiddleware } from './providers/host-capability-prompt.js';
+import { capabilityMiddleware } from './capability-prompt.js';
 import { requiredToolChoiceMiddleware } from './providers/required-tool-choice.js';
 import { isHostCapabilityProvider, resolveHostToolCapabilities } from './providers/host-tools.js';
-import type { ModelRuntimeIdentity } from './providers/host-tools.js';
 import type { ToolCallFraming } from './tool-rescue/types.js';
 import { Agent } from 'undici';
 import { createLogger } from '../logger.js';
@@ -34,7 +33,6 @@ import { synthesizeModelConfig } from './rules.js';
 import { parseModelReference } from './model-reference.js';
 import { getRuntimeModel } from './resolution.js';
 
-export type { ModelRuntimeIdentity } from './providers/host-tools.js';
 export type { ModelSize } from '../../types/config.js';
 export { selectModelReference } from './resolution.js';
 
@@ -149,12 +147,13 @@ export function resolveToolFraming(config: Model): ToolCallFraming {
  * ```typescript
  * const modelConfig = getModelConfig('default');
  * const model = getModel(modelConfig);
- * // Or, for claude-code with built-in CLI tools, keyed to a temp working dir:
- * const model = getModel(modelConfig, { workingDirId: `${gameID}-${playerID}` });
+ * // Or, with the seat's workspace described in the system prompt:
+ * const model = getModel(modelConfig, { files: context.files });
  * ```
  */
 export function getModel(config: Model, options?: {
-  workingDirId?: string;
+  /** The seat's workspace, described to the model when the request declares the bash tool. */
+  files?: ResolvedFilesConfig;
   onToolFraming?: (info: { framing: ToolCallFraming }) => void;
   /** The calling agent's completion tools, named by provider prompt guidance. */
   completionTools?: string[];
@@ -230,7 +229,7 @@ export function getModel(config: Model, options?: {
     case "claude-code": {
       // The provider builder rebinds configuration to forced prompt mode. The
       // middleware tail below must use that rebound value to preserve tool behavior.
-      const claudeCode = buildClaudeCodeModel(config, options);
+      const claudeCode = buildClaudeCodeModel(config);
       result = claudeCode.model;
       config = claudeCode.config;
       break;
@@ -304,17 +303,21 @@ export function getModel(config: Model, options?: {
         middleware: toolRescueMiddleware()
       });
   }
-  // Host-capability guidance is deliberately outermost. It runs before tool
-  // rescue, Claude system-message normalization, and required-tool handling so
-  // each inner middleware sees the reminder in the prompt it transforms.
-  const requestedHostTools = config.options?.hostTools;
-  if (isHostCapabilityProvider(config.provider) && requestedHostTools?.length) {
+  // Capability guidance is deliberately outermost. It runs before tool rescue,
+  // Claude system-message normalization, and required-tool handling so each
+  // inner middleware sees the reminder in the prompt it transforms. Native web
+  // access exists only on CLI providers; the workspace works on any provider.
+  const web = isHostCapabilityProvider(config.provider)
+    && resolveHostToolCapabilities(config.options?.hostTools).web;
+  if (options?.files || web) {
     result = wrapLanguageModel({
       model: result,
-      middleware: hostCapabilityMiddleware(
-        config.provider,
-        resolveHostToolCapabilities(requestedHostTools),
-        options?.completionTools,
+      middleware: capabilityMiddleware(
+        { files: options?.files, web },
+        {
+          completionTools: options?.completionTools,
+          terminalNoun: toolFraming === 'action' ? 'actions' : 'tools',
+        },
       ),
     });
   }
@@ -350,7 +353,7 @@ export function getModel(config: Model, options?: {
  * })
  * // Returns: { openrouter: { reasoning: { effort: 'medium' } } }
  */
-export function buildProviderOptions(model: Model, runtimeIdentity?: ModelRuntimeIdentity, previousResponseId?: string): ProviderMetadata {
+export function buildProviderOptions(model: Model, previousResponseId?: string): ProviderMetadata {
   // Model-name defaults are assigned by rules.ts; request-time reasoning and provider
   // translation intentionally remain here where the adapters serialize them.
   let result: ProviderMetadata;
@@ -365,7 +368,7 @@ export function buildProviderOptions(model: Model, runtimeIdentity?: ModelRuntim
 
   // Codex permits only its compatible adapter fields and proxy extension.
   else if (model.provider === 'codex') {
-    result = buildCodexProviderOptions(model, runtimeIdentity, previousResponseId);
+    result = buildCodexProviderOptions(model, previousResponseId);
   }
 
   else if (!model.options) {

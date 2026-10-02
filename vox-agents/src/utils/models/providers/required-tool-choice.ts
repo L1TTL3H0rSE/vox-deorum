@@ -6,7 +6,7 @@
  *
  * The system instruction names the caller's completion tools ({@link VoxAgent.completionTools}) as
  * the ones that end the turn, and marks the rest as support: the remaining client function tools
- * plus, in Codex's host-tools mode, the built-in tools. Naming every client tool as a way to
+ * plus, when Codex has Web on, its built-in web search. Naming every client tool as a way to
  * "finish" made models satisfy the requirement with a support call and postpone a completion they
  * were ready to make. It is added whatever the tool choice, so it never moves the cached prefix.
  */

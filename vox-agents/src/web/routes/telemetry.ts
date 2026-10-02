@@ -62,6 +62,8 @@ router.get('/databases', async (_req: Request, res: Response<TelemetryDatabasesR
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
+          // Agent workspaces may hold their own .db files, which are not game telemetry
+          if (dir === baseDir && entry.name === 'workspaces') continue;
           // Recursively scan subdirectories
           await scanDirectory(fullPath, baseDir);
         } else if (entry.isFile() && entry.name.endsWith('.db') && !entry.name.endsWith('.telepathist.db')) {

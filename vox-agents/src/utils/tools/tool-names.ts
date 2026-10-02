@@ -6,6 +6,9 @@
  * `agents -> models -> providers -> terminal-tools -> agent-registry -> agents` would create.
  */
 
+/** The registered name of the workspace tool, kept here so provider middleware can name it. */
+export const bashToolName = 'bash';
+
 /**
  * Formats a name list into a grammatical, backtick-quoted fragment:
  *   1 -> "`a`"   2 -> "`a` or `b`"   N -> "`a`, `b`, or `c`" (Oxford comma).

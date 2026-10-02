@@ -11,7 +11,7 @@ import { config } from "../utils/config.js";
 /** Agent that voices a seat's diplomacy when the seat doesn't name one. */
 export const defaultDiplomat = "diplomat";
 
-/** Bash calls an agent run may attempt when the files setting doesn't name a quota. */
+/** Model steps of one agent execution that may call bash when the files setting doesn't name a quota. */
 export const defaultFilesQuota = 20;
 
 /** The agent names filling a seat's roles, with the diplomat defaulted. */

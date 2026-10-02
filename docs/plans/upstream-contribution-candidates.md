@@ -16,7 +16,7 @@ Fix the premature semicolon in `AttackKey::operator==` so previous attacker, def
 
 **Related files:** core `CvTacticalAI.h`. **Patch:** `0058`.
 
-### 2. Show war duration for the hovered civilization (submitted: [#13360], open)
+### 2. Show war duration for the hovered civilization (submitted: [#13360], merged)
 
 Use `playerID` in the notification panel's war-weariness tooltip. The current upstream call uses the undefined `g_iAIPlayer`, so it queries the wrong opponent. Extract this small correction from the observer-interface changes.
 
@@ -40,7 +40,7 @@ Skip combat-animation flag hiding for observers in both `RunCombatSim` and `EndC
 
 **Related files:** `(3a) VP - EUI Compatibility Files/LUA/UnitFlagManager.lua`. **Patch:** `0009`.
 
-### 6. Suppress defeated-leader interruptions during autoplay (submitted: [#13360], open)
+### 6. Suppress defeated-leader interruptions during autoplay (submitted: [#13360], merged)
 
 Skip `DoKilledByPlayer` in `CheckForMurder` while AI autoplay is active. This keeps automated games moving when a civilization is eliminated. Reproduce the interruption and confirm normal human games still show the defeated leader.
 

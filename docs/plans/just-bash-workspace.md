@@ -1,6 +1,6 @@
 # just-bash workspace for all agents
 
-This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 2 done, including the Node 22.23.3 requirement and the bash quota check from Step 5.
+This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 4 done, including the Node 22.23.3 requirement, the bash quota check from Step 5, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
 
 ## Context
 
@@ -95,16 +95,16 @@ The `bash` tool is registered only when the context's `files` setting is on, and
 
 With Node 22.23.3, everything else passed:
 
-1. **Mounts.** `ReadWriteFs` and `OverlayFs` accept a canonical Windows `root` under `MountableFs` mount points. Writes, heredocs, and `ls`/`cat`/`rg`/`jq`/`sqlite3` work, and `/tmp` stays in memory. `OverlayFs` needs `mountPoint: '/'` when mounted inside `MountableFs`; without it the real files show up under `home/user/project` inside the mount.
+1. **Mounts.** `ReadWriteFs` and `OverlayFs` accept a canonical Windows `root` under `MountableFs` mount points. Writes, heredocs, and `ls`/`cat`/`rg`/`jq`/`sqlite3` work, including on a `/tmp` mounted on disk. `OverlayFs` needs `mountPoint: '/'` when mounted inside `MountableFs`; without it the real files show up under `home/user/project` inside the mount.
 2. **Containment.** `..` past the mount, Windows absolute paths (`C:\...`, `C:/...`, `/C:/...`), and `cp` from a host path all report "No such file". `ln -s` fails with "Operation not permitted". A real symlink placed inside the root is not followed, and a real junction to the parent is rejected with `EACCES ... resolves outside sandbox`. `echo > game/../../x` writes to the virtual in-memory base, not the disk. Nothing reached the disk outside a root.
-3. **Concurrency.** Two concurrent `exec` calls on one `Bash` each keep their own `cd` and variables, and 200 appends from one finished intact. One shared `Bash` per workspace is fine.
+3. **Concurrency.** Two concurrent `exec` calls on one `Bash` each keep their own `cd` and variables, and 200 appends from one finished intact. Step 2 still builds a `Bash` per command, so files outside the mounts never outlive a command, while the mount filesystems are shared.
 4. **Abort.** An `AbortSignal` stops a script that yields (`sleep 10` stopped after 300 ms with exit 124). A tight CPU loop never yields to the timer, so the abort does not fire; the default `maxCommandCount` limit (100,000) ends it with exit 126 in about 1 to 5 seconds.
 
 Other findings that shape Step 2:
 
 - A write to a read-only mount makes `exec` reject with an `EROFS` error instead of returning a non-zero exit code. The same happens for a write through a junction that resolves outside the root. The tool must catch rejections from `exec` and return them as `stderr` with exit code 1.
 - `python3`, `js-exec`, `curl`, and `node` are absent with default options.
-- `mv` from a writable mount to `/tmp` deletes the real file and keeps the copy in memory. That is ordinary `mv` behavior, so no special handling.
+- `mv` between mounts, such as from `/workspace/game` to `/tmp`, copies the file and deletes the original. That is ordinary `mv` behavior, so no special handling.
 
 **Decision: require Node 22.23.3.** Done in this step:
 
@@ -132,7 +132,7 @@ Other findings that shape Step 2:
 
 - New `utils/workspace/player-workspace.ts`:
   - `workspaceRoot()` returns `<config.telemetryDir || 'telemetry'>/workspaces`, resolved from cwd.
-  - `class PlayerWorkspace(files, gameID, playerID)`. The constructor lists the mounts without touching disk and rejects a game ID that cannot name a folder. Each `exec` checks `process.versions.node` and, below 22.17.0, returns an error result asking the user to upgrade Node instead of mounting anything. The first `exec` creates the real folders, seeds guides, and builds the mount filesystems (per Config design, including `/tmp`). Every `exec` then builds its own `MountableFs` over those mounts with a fresh `InMemoryFs` base, and its own `Bash` with `cwd: '/workspace'`, network and Python/JS off, default limits. A fresh shell costs about 5 ms.
+  - `class PlayerWorkspace(files, gameID, playerID)`. The constructor lists the mounts without touching disk and rejects a game ID or shared name that cannot name a folder. Each `exec` checks `process.versions.node` and, below 22.17.0, returns an error result asking the user to upgrade Node instead of mounting anything. The first `exec` creates the real folders, seeds guides, and builds the mount filesystems (per Config design, including `/tmp`). Every `exec` then builds its own `MountableFs` over those mounts with a fresh `InMemoryFs` base, and its own `Bash` with `cwd: '/workspace'`, network and Python/JS off, default limits. A fresh shell costs about 5 ms.
   - `exec(command, signal)` returns `{ stdout, stderr, exitCode }`, each stream capped (8,000 chars, with a `[truncated N chars]` marker). A rejected `exec` (for example `EROFS` from a write to a read-only mount, or `EACCES` from a path that resolves outside a root) becomes `{ stdout: "", stderr: <message>, exitCode: 1 }`. Abort only stops scripts that yield; CPU-bound loops are ended by the default `maxCommandCount`.
   - Guide seeding: copy the create-once logic from `seedHostWorkspaceGuide` (`flag: 'wx'`, ignore `EEXIST`, log other errors) here; Step 3 deletes the original. Seed `AGENTS.md` at each writable game or shared root, not in scratch. The game guide keeps today's content (notes vs snapshots; observations vs inferences vs plans; current tools override stale notes; no untrusted text in the guide) minus the CLI shell-policy section. The shared guide says the folder outlives the game and is seen by other seats and games, so it holds generalized lessons and reusable references, never current-game state.
 - `VoxContext`: cache `PlayerWorkspace` instances by `gameID-playerID` so all agents of a seat share one.
@@ -216,7 +216,7 @@ Quota closure keeps the bash definition and static capability instruction unchan
 ### 8. Telemetry, docs, tests
 
 - `utils/telemetry/host-capabilities.ts`: `hostCapabilityTelemetryAttributes(model, files)` lists `read`/`write` from the context's files for any provider (`write` when any mount is writable) plus `web` for CLI providers. Non-CLI providers now emit `host.capability` when files are on.
-- `web/routes/telemetry.ts`: skip the `workspaces` folder in the `/databases` scan.
+- Done in Step 2: `web/routes/telemetry.ts` skips the top-level `workspaces` folder in the `/databases` scan.
 - Local config (gitignored, done for the user, not committed): seat 0 `files: "write"` + `hostTools: ["Web"]`; seat 7 `files: "write"`, no `hostTools`.
 - Docs: the `files` setting, folder layout, access, quota, and cross-seat caveat already have a section in `docs/players/configuration.md` and a paragraph in `docs/developers/vox-agents/overview.md`. Rewrite the host-tools paragraphs there (free workspace steps, nudge, auto compaction and `continuityThreshold`, caching with files on, Web-only CLI tools, cross-seat caveat) and the matching paragraph in `docs/players/configuration.md`, including the breaking `hostTools` change. Add one bullet on `files` to the Critical Conventions in `vox-agents/AGENTS.md`.
 - Tests (Vitest, behavior not wording):

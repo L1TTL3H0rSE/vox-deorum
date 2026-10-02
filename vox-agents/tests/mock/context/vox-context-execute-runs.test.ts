@@ -416,8 +416,8 @@ describe('VoxContext Codex thread continuation', () => {
 
     expect(stc).toHaveBeenCalledTimes(2);
     expect(bpo).toHaveBeenCalledTimes(2);
-    expect(bpo.mock.calls[0]![2]).toBeUndefined();
-    expect(bpo.mock.calls[1]![2]).toBe('chatcmpl_codex_step1');
+    expect(bpo.mock.calls[0]![1]).toBeUndefined();
+    expect(bpo.mock.calls[1]![1]).toBe('chatcmpl_codex_step1');
   });
 
   it('never threads a selector for a non-Codex provider, even when the response carries an id', async () => {
@@ -437,8 +437,8 @@ describe('VoxContext Codex thread continuation', () => {
 
     expect(stc).toHaveBeenCalledTimes(2);
     expect(bpo).toHaveBeenCalledTimes(2);
-    expect(bpo.mock.calls[0]![2]).toBeUndefined();
-    expect(bpo.mock.calls[1]![2]).toBeUndefined();
+    expect(bpo.mock.calls[0]![1]).toBeUndefined();
+    expect(bpo.mock.calls[1]![1]).toBeUndefined();
   });
 });
 

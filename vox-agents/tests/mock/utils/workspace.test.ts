@@ -67,6 +67,10 @@ describe('PlayerWorkspace', () => {
     expect(() => new PlayerWorkspace(files(), '../escape', 0)).toThrow();
   });
 
+  it('should reject a shared name that would leave the shared folder', () => {
+    expect(() => new PlayerWorkspace(files({ shared: { '../games': 'write' } }), 'g1', 0)).toThrow();
+  });
+
   describe.skipIf(!workspaceNodeSupported())('on disk', () => {
     it('should write game files to the player folder and share them with a later workspace', async () => {
       const first = new PlayerWorkspace(files(), 'g1', 0);

@@ -20,8 +20,7 @@ import type { CodexProxyConfig } from './codex-proxy.js';
 import { codexActivityMiddleware } from './codex-response.js';
 import { requiredToolChoiceMiddleware } from './required-tool-choice.js';
 import type { RequiredToolChoiceOptions } from './required-tool-choice.js';
-import { resolveHostToolAccess, seedHostWorkspaceGuide } from './host-tools.js';
-import type { ModelRuntimeIdentity } from './host-tools.js';
+import { resolveHostToolCapabilities } from './host-tools.js';
 
 /** Dispatchers share timeout settings across models, but never reuse connections. */
 const codexDispatchers = new Map<number, Agent>();
@@ -104,38 +103,27 @@ export function buildCodexModel(config: Model, options?: RequiredToolChoiceOptio
 
 /** The per-request Codex policy extension accepted by the pinned proxy. */
 export type CodexRequestExtension = {
-  sandbox: 'disabled' | 'read-only' | 'workspace-write';
+  sandbox: 'disabled';
   web_search: 'disabled' | 'live';
-  cwd?: string;
 };
 
 /**
- * Maps resolved host meta-tool access onto the proxy's per-request policy:
- * Write selects a workspace-write sandbox in an isolated working directory
- * under the proxy root (which Codex itself enforces, network stays off), and
- * Web enables live search. File access is disabled unless Read or Write is
- * explicitly granted, and Web alone never creates a working directory.
- * An optional previous response id is forwarded as the proxy's
- * previous_response_id continuation preference, so it resumes the same thread.
+ * Maps the configured host meta-tools onto the proxy's per-request policy:
+ * Web enables live search, and everything else stays off. Codex never touches
+ * the local filesystem, so the sandbox is always disabled and no working
+ * directory is sent. An optional previous response id is forwarded as the
+ * proxy's previous_response_id continuation preference, so it resumes the
+ * same thread.
  */
 export function buildCodexProviderOptions(
   model: Model,
-  runtimeIdentity?: ModelRuntimeIdentity,
   previousResponseId?: string,
 ): ProviderMetadata {
-  const access = resolveHostToolAccess(model.options?.hostTools, {
-    workingDirectoryBase: getCodexProxyConfig().root,
-    workingDirId: runtimeIdentity?.workingDirId,
-    workingDirectoryTools: ['Read', 'Write'],
-  });
-  seedHostWorkspaceGuide(access, 'codex');
+  const capabilities = resolveHostToolCapabilities(model.options?.hostTools);
   const extension: CodexRequestExtension = {
-    sandbox: access.write ? 'workspace-write' : access.read ? 'read-only' : 'disabled',
-    web_search: access.web ? 'live' : 'disabled',
+    sandbox: 'disabled',
+    web_search: capabilities.web ? 'live' : 'disabled',
   };
-  // The proxy requires cwd to be its --root or a descendant; the working
-  // directory is created under that root, so containment holds by construction.
-  if (access.workingDirectory) extension.cwd = access.workingDirectory;
 
   const options: { x_codex: CodexRequestExtension; reasoningEffort?: string; previous_response_id?: string } = { x_codex: extension };
   if (model.options?.reasoningEffort !== undefined) options.reasoningEffort = model.options.reasoningEffort;

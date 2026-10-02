@@ -6,11 +6,8 @@
  * MockLanguageModelV4 the middleware tail can wrap, and capture the settings the
  * factory receives to assert how the claude-code case translates model config.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MockLanguageModelV4 } from 'ai/test';
-import os from 'node:os';
-import fs from 'node:fs';
-import path from 'node:path';
 
 // Hoisted holder so the (hoisted) vi.mock factory can record the captured settings and
 // expose the created model instance (for reading transformed generate params via its
@@ -62,7 +59,8 @@ vi.mock('ai-sdk-provider-claude-code', () => {
 
 import { getModel, getModelConfig, resolveToolFraming } from '../../../src/utils/models/models.js';
 import { toolRescueMiddleware } from '../../../src/utils/models/tool-rescue/middleware.js';
-import { hostCapabilityHeading, hostCapabilityInstruction } from '../../../src/utils/models/providers/host-capability-prompt.js';
+import { capabilityHeading, capabilityInstruction } from '../../../src/utils/models/capability-prompt.js';
+import type { ResolvedFilesConfig } from '../../../src/types/index.js';
 
 /** Build a ReadableStream that emits the given chunks then closes (for wrapStream tests). */
 function streamFrom(chunks: any[]): ReadableStream<any> {
@@ -93,9 +91,6 @@ async function drain(stream: ReadableStream<any>): Promise<any[]> {
   }
   return out;
 }
-
-// The concrete tool list that claude-code's ['everything'] meta-tools expand to.
-const SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'WebFetch', 'WebSearch', 'TodoWrite'];
 
 describe('claude-code provider', () => {
   beforeEach(() => {
@@ -195,47 +190,26 @@ describe('claude-code provider', () => {
   });
 
   describe('getModel built-in CLI tools (Stage 2)', () => {
-    const tempRoot = path.join(os.tmpdir(), 'vox-claude-code');
-    afterEach(() => {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
-    });
-
-    it("expands ['everything'] to the vetted safe set, path-scopes Write/Edit, blocks Bash, and creates the temp cwd", () => {
-      getModel(
-        { provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt', hostTools: ['everything'] } },
-        { workingDirId: 'g1-3' }
-      );
-      // Availability: the full vetted set, never Bash.
-      expect(mocks.captured.tools).toEqual(SAFE_TOOLS);
-      expect(mocks.captured.tools).not.toContain('Bash');
-      // Permission: Write/Edit path-scoped to the temp cwd, everything else bare.
-      expect(mocks.captured.allowedTools).toEqual([
-        'Read', 'Glob', 'Grep', 'Write(./**)', 'Edit(./**)', 'WebFetch', 'WebSearch', 'TodoWrite',
-      ]);
+    it("expands ['Web'] to the web tools with bare permissions and no cwd", () => {
+      getModel({ provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt', hostTools: ['Web'] } });
+      // Availability: the Web tools plus TodoWrite bookkeeping, never a file tool.
+      expect(mocks.captured.tools).toEqual(['WebFetch', 'WebSearch', 'TodoWrite']);
+      // Permission: the allowlist mirrors the tool list with no path scoping.
+      expect(mocks.captured.allowedTools).toEqual(mocks.captured.tools);
       // disallowedTools is deliberately unset: the provider ignores it whenever
-      // allowedTools is present (and warns if both are supplied). Bash stays blocked by
-      // its absence from the allowlist under dontAsk deny-by-default.
+      // allowedTools is present (and warns if both are supplied).
       expect(mocks.captured.disallowedTools).toBeUndefined();
       expect(mocks.captured.permissionMode).toBe('dontAsk');
-      // Temp cwd keyed to the working dir id, created on disk.
-      expect(mocks.captured.cwd.endsWith(path.join('vox-claude-code', 'g1-3'))).toBe(true);
-      expect(fs.existsSync(mocks.captured.cwd)).toBe(true);
+      // No working directory: Claude Code no longer touches the filesystem.
+      expect(mocks.captured.cwd).toBeUndefined();
     });
 
-    it('expands the Read meta-tool to search tools plus TodoWrite bookkeeping', () => {
-      getModel(
-        { provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt', hostTools: ['Read'] } },
-        { workingDirId: 'g2-1' }
-      );
-      expect(mocks.captured.tools).toEqual(['Read', 'Glob', 'Grep', 'TodoWrite']);
-      expect(mocks.captured.allowedTools).toEqual(['Read', 'Glob', 'Grep', 'TodoWrite']);
-    });
-
-    it('fails fast on concrete tool names outside the meta-tool vocabulary', () => {
-      expect(() => getModel(
-        { provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt', hostTools: ['Read', 'Bash'] } },
-        { workingDirId: 'g2-2' }
-      )).toThrow('Unsupported hostTools entries');
+    it('fails fast on entries outside the Web whitelist', () => {
+      for (const hostTools of [['Read'], ['Write'], ['everything'], ['Bash'], ['Web', 'Read']]) {
+        expect(() => getModel(
+          { provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt', hostTools } } as any,
+        )).toThrow('Unsupported hostTools entries');
+      }
     });
 
     it('stays pure text (tools: []) with no cwd/permission settings when no built-in tools requested', () => {
@@ -1191,50 +1165,41 @@ describe('claude-code provider', () => {
       });
     });
 
-    it("threads 'action' framing end-to-end through getModel when built-in CLI tools are enabled", async () => {
-      const tempRoot = path.join(os.tmpdir(), 'vox-claude-code');
-      try {
-        const model = getModel(
-          {
-            provider: 'claude-code',
-            name: 'sonnet',
-            options: { toolMiddleware: 'prompt', hostTools: ['Read'] },
-          },
-          { workingDirId: 'g3-1', completionTools: ['send_message', 'inactive_action'] }
-        );
-        await (model as any).doGenerate({
-          tools,
-          toolChoice: { type: 'auto' },
-          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-          providerOptions: {},
-        });
-        const calls = mocks.model.doGenerateCalls;
-        const finalPrompt = calls[calls.length - 1].prompt;
-        expect(finalPrompt.some((m: any) => m.role === 'system')).toBe(false);
-        const sys = { content: userText(finalPrompt) };
-        expect(sys.content).toContain(hostCapabilityInstruction(
-          'claude-code',
-          { read: true, write: false, web: false },
-          ['send_message'],
-        ));
-        expect(sys.content).not.toContain('inactive_action');
-        expect(sys.content).toContain('## Action Calling');
-        expect(sys.content).toContain('## Available Actions');
-        // The reframed prompt must not mention the built-in CLI tools at all.
-        expect(sys.content).not.toContain('Built-in');
-      } finally {
-        fs.rmSync(tempRoot, { recursive: true, force: true });
-      }
-    });
-
-    it('adds one host reminder per call to a reused prompt, ahead of the rescue action list', async () => {
+    it("threads 'action' framing and the workspace reminder end-to-end through getModel", async () => {
+      const files: ResolvedFilesConfig = { game: 'write', shared: {}, quota: 7 };
       const model = getModel(
         {
           provider: 'claude-code',
           name: 'sonnet',
-          options: { toolMiddleware: 'prompt', hostTools: ['Write', 'Web'] },
+          options: { toolMiddleware: 'prompt', hostTools: ['Web'] },
         },
-        { workingDirId: 'g3-2' },
+        { files, completionTools: ['send_message', 'inactive_action'] }
+      );
+      await (model as any).doGenerate({
+        tools: [...tools, { ...tools[0], name: 'bash', description: 'Run a script' }],
+        toolChoice: { type: 'auto' },
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        providerOptions: {},
+      });
+      const calls = mocks.model.doGenerateCalls;
+      const finalPrompt = calls[calls.length - 1].prompt;
+      expect(finalPrompt.some((m: any) => m.role === 'system')).toBe(false);
+      const sys = { content: userText(finalPrompt) };
+      expect(sys.content).toContain(capabilityInstruction({ files, web: true }, ['send_message'], 'actions'));
+      expect(sys.content).not.toContain('inactive_action');
+      expect(sys.content).toContain('## Action Calling');
+      expect(sys.content).toContain('## Available Actions');
+      // The reframed prompt must not mention the built-in CLI tools at all.
+      expect(sys.content).not.toContain('Built-in');
+    });
+
+    it('adds one capability reminder per call to a reused prompt, ahead of the rescue action list', async () => {
+      const model = getModel(
+        {
+          provider: 'claude-code',
+          name: 'sonnet',
+          options: { toolMiddleware: 'prompt', hostTools: ['Web'] },
+        },
       );
       const prompt: any = [
         { role: 'system', content: 'You are the strategist.' },
@@ -1251,17 +1216,28 @@ describe('claude-code provider', () => {
       await generate();
 
       expect(prompt[0].content).toBe('You are the strategist.');
-      const hostInstruction = hostCapabilityInstruction(
-        'claude-code',
-        { read: true, write: true, web: true },
-      )!;
+      const instruction = capabilityInstruction({ web: true }, [], 'actions')!;
       for (const call of mocks.model.doGenerateCalls.slice(-2)) {
         expect(call.prompt.some((message: any) => message.role === 'system')).toBe(false);
         const system = userText(call.prompt);
-        expect(system.split(hostInstruction)).toHaveLength(2);
+        expect(system.split(instruction)).toHaveLength(2);
         expect(system).toContain('## Available Actions');
-        expect(system.indexOf(hostInstruction)).toBeLessThan(system.indexOf('## Available Actions'));
+        expect(system.indexOf(instruction)).toBeLessThan(system.indexOf('## Available Actions'));
       }
+    });
+
+    it('adds no capability reminder when files are on but the request declares no bash tool', async () => {
+      const model = getModel(
+        { provider: 'claude-code', name: 'sonnet', options: { toolMiddleware: 'prompt' } },
+        { files: { game: 'write', shared: {}, quota: 20 } },
+      );
+      await (model as any).doGenerate({
+        tools,
+        toolChoice: { type: 'auto' },
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        providerOptions: {},
+      });
+      expect(userText(mocks.model.doGenerateCalls.at(-1).prompt)).not.toContain(capabilityHeading);
     });
 
     it('uses Action framing for pure-text claude-code too (no built-in tools)', async () => {
@@ -1279,7 +1255,7 @@ describe('claude-code provider', () => {
       // claude-code is always action-framed, regardless of built-in CLI tools.
       expect(sys.content).toContain('## Action Calling');
       expect(sys.content).not.toContain('## Tool Calling');
-      expect(sys.content).not.toContain(hostCapabilityHeading);
+      expect(sys.content).not.toContain(capabilityHeading);
     });
 
     // Regression for the negotiator/diplomat prompt shape: a main system prompt + game context,
@@ -1322,10 +1298,7 @@ describe('resolveToolFraming', () => {
   it("returns 'action' for claude-code regardless of built-in CLI tools", () => {
     // With built-in CLI tools...
     expect(resolveToolFraming(
-      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Read'] } }
-    )).toBe('action');
-    expect(resolveToolFraming(
-      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['everything'] } }
+      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Web'] } }
     )).toBe('action');
     // ...and for pure-text claude-code (no or empty hostTools).
     expect(resolveToolFraming({ provider: 'claude-code', name: 'sonnet' })).toBe('action');
@@ -1337,7 +1310,7 @@ describe('resolveToolFraming', () => {
   it("returns 'tool' for any non-claude-code provider, even if hostTools is set", () => {
     expect(resolveToolFraming({ provider: 'openrouter', name: 'x' })).toBe('tool');
     expect(resolveToolFraming(
-      { provider: 'openrouter', name: 'x', options: { hostTools: ['Read'] } }
+      { provider: 'openrouter', name: 'x', options: { hostTools: ['Web'] } }
     )).toBe('tool');
   });
 
@@ -1346,7 +1319,7 @@ describe('resolveToolFraming', () => {
     expect(resolveToolFraming({ provider: 'openrouter', name: 'x', options: { framing: 'action' } })).toBe('action');
     // An explicit 'tool' override beats the claude-code+built-in-tools default.
     expect(resolveToolFraming(
-      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Read'], framing: 'tool' } }
+      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Web'], framing: 'tool' } }
     )).toBe('tool');
   });
 });

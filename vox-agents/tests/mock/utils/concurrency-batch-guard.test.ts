@@ -67,7 +67,7 @@ describe('streamTextWithConcurrency batch guard', () => {
   it('rejects a Claude Code model before its forced prompt middleware is bypassed', async () => {
     const params = withModelConfig(
       { model: {} as any, messages: [] } as any,
-      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Write'] } } as any
+      { provider: 'claude-code', name: 'sonnet', options: { hostTools: ['Web'] } } as any
     );
 
     await expect(streamTextWithConcurrency(params, fakeContext)).rejects.toThrow(

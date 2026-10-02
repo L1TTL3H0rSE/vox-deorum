@@ -2,9 +2,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateText, streamText, tool } from 'ai';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { z } from 'zod';
 
 const proxyMocks = vi.hoisted(() => ({
@@ -56,8 +53,6 @@ import { buildCodexModel, buildCodexProviderOptions } from '../../../../src/util
 import { codexActivityMiddleware } from '../../../../src/utils/models/providers/codex-response.js';
 import { completionToolsInstruction } from '../../../../src/utils/models/providers/required-tool-choice.js';
 import { streamTextWithConcurrency, withModelConfig } from '../../../../src/utils/models/concurrency.js';
-
-const testProxyRoot = path.join(os.tmpdir(), 'vox-codex-provider-test');
 
 /** Creates a standard non-streaming Chat Completions response. */
 function completion(
@@ -159,14 +154,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  fs.rmSync(testProxyRoot, { recursive: true, force: true });
 });
 
 describe('Codex provider options', () => {
-  it('sends the default-denied extension without a cwd when host tools are empty', () => {
+  it('sends the default denied extension with the sandbox disabled and no cwd', () => {
     expect(buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }))
       .toEqual({ codex: { x_codex: { sandbox: 'disabled', web_search: 'disabled' } } });
-    expect(fs.existsSync(testProxyRoot)).toBe(false);
   });
 
   it('whitelists reasoning effort and excludes unrelated Vox options', () => {
@@ -183,75 +176,24 @@ describe('Codex provider options', () => {
     });
   });
 
-  it('maps everything to a workspace-write sandbox with live search in a scoped cwd', () => {
-    expect(buildCodexProviderOptions(
-      { provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools: ['everything'] } },
-      { workingDirId: 'g1-2' },
-    )).toEqual({
-      codex: {
-        x_codex: {
-          sandbox: 'workspace-write',
-          web_search: 'live',
-          cwd: path.join(testProxyRoot, 'g1-2'),
-        },
-      },
-    });
-    expect(fs.existsSync(path.join(testProxyRoot, 'g1-2'))).toBe(true);
-    expect(fs.existsSync(path.join(testProxyRoot, 'g1-2', 'AGENTS.md'))).toBe(true);
-  });
-
-  it('keeps Read on the read-only, search-disabled floor with an isolated cwd', () => {
-    expect(buildCodexProviderOptions(
-      { provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools: ['Read'] } },
-    )).toEqual({
-      codex: {
-        x_codex: {
-          sandbox: 'read-only',
-          web_search: 'disabled',
-          cwd: path.join(testProxyRoot, 'default'),
-        },
-      },
-    });
-    expect(fs.existsSync(path.join(testProxyRoot, 'default', 'AGENTS.md'))).toBe(true);
-  });
-
-  it('maps Write-only access to a workspace-write sandbox with an isolated cwd', () => {
-    expect(buildCodexProviderOptions(
-      { provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools: ['Write'] } },
-    )).toEqual({
-      codex: {
-        x_codex: {
-          sandbox: 'workspace-write',
-          web_search: 'disabled',
-          cwd: path.join(testProxyRoot, 'default'),
-        },
-      },
-    });
-    expect(fs.existsSync(path.join(testProxyRoot, 'default', 'AGENTS.md'))).toBe(true);
-  });
-
-  it('enables live search for Web without granting a sandbox or working directory', () => {
+  it('enables live search for Web with the sandbox still disabled', () => {
     expect(buildCodexProviderOptions(
       { provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools: ['Web'] } },
     )).toEqual({
-      codex: {
-        x_codex: {
-          sandbox: 'disabled',
-          web_search: 'live',
-        },
-      },
+      codex: { x_codex: { sandbox: 'disabled', web_search: 'live' } },
     });
-    expect(fs.existsSync(testProxyRoot)).toBe(false);
   });
 
-  it('rejects names outside the meta-tool vocabulary', () => {
-    expect(() => buildCodexProviderOptions({
-      provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools: ['Bash'] },
-    })).toThrow('Unsupported hostTools entries');
+  it('rejects entries outside the Web whitelist', () => {
+    for (const hostTools of [['Read'], ['Write'], ['everything'], ['Bash'], ['Web', 'Read']]) {
+      expect(() => buildCodexProviderOptions({
+        provider: 'codex', name: 'gpt-5.4-mini', options: { hostTools },
+      } as any)).toThrow('Unsupported hostTools entries');
+    }
   });
 
   it('adds previous_response_id only when a continuation selector is supplied', () => {
-    expect(buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'))
+    expect(buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'))
       .toEqual({ codex: { x_codex: { sandbox: 'disabled', web_search: 'disabled' }, previous_response_id: 'chatcmpl_codex_x' } });
     expect(buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }))
       .not.toHaveProperty('codex.previous_response_id');
@@ -263,7 +205,7 @@ describe('Codex provider options', () => {
 
     await buildCodexModel({ provider: 'codex', name: 'gpt-5.4-mini' }).doGenerate({
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Continue.' }] }],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'),
     });
 
     const [body] = capturedBodies(fetchMock);
@@ -940,7 +882,7 @@ describe('Codex thread reuse telemetry', () => {
 
     const result = await buildCodexModel({ provider: 'codex', name: 'gpt-5.4-mini' }).doGenerate({
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello.' }] }],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'),
     });
 
     expect(result.providerMetadata).toEqual({ codex: { threadReuse: 'tried_failed' } });
@@ -960,7 +902,7 @@ describe('Codex thread reuse telemetry', () => {
         { role: 'user', content: [{ type: 'text', text: 'Hello.' }] },
         { role: 'assistant', content: [{ type: 'text', text: 'Hi.' }] },
       ],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'),
     });
 
     const [body] = capturedBodies(fetchMock);
@@ -978,7 +920,7 @@ describe('Codex thread reuse telemetry', () => {
         { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call-city', toolName: 'found_city', input: '{"name":"Rome"}' }] },
         { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call-city', toolName: 'found_city', output: { type: 'text', value: 'Founded.' } }] },
       ],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'),
       tools: [foundCityTool()],
       toolChoice: { type: 'auto' },
     });
@@ -998,7 +940,7 @@ describe('Codex thread reuse telemetry', () => {
 
     const result = await buildCodexModel({ provider: 'codex', name: 'gpt-5.4-mini' }).doGenerate({
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello.' }] }],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, ''),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, ''),
     });
 
     const [body] = capturedBodies(fetchMock);
@@ -1054,7 +996,7 @@ describe('Codex thread reuse telemetry', () => {
 
     const parts = await streamParts(buildCodexModel({ provider: 'codex', name: 'gpt-5.4-mini' }), {
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hello.' }] }],
-      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x'),
+      providerOptions: buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x'),
     });
 
     expect(parts.find((part) => part.type === 'finish')?.providerMetadata).toEqual({
@@ -1580,7 +1522,7 @@ describe('Codex built-in activity normalization', () => {
       },
     }));
     vi.stubGlobal('fetch', fetchMock);
-    const providerOptions = buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, undefined, 'chatcmpl_codex_x');
+    const providerOptions = buildCodexProviderOptions({ provider: 'codex', name: 'gpt-5.4-mini' }, 'chatcmpl_codex_x');
     const result = streamText({
       model: buildCodexModel({ provider: 'codex', name: 'gpt-5.4-mini' }),
       messages: [

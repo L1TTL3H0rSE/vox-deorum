@@ -293,10 +293,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       // Apply prepared configuration
       messages = stepConfig.messages || messages;
       const stepModel = stepConfig.model || model;
-      // Use one identity for construction and request options so any provider
-      // working-directory policy remains stable across a single step.
-      const runtimeIdentity = { workingDirId: `${parameters.gameID}-${parameters.playerID}` };
-      const stepProviderOptions = buildProviderOptions(stepModel, runtimeIdentity, previousResponseId);
+      const stepProviderOptions = buildProviderOptions(stepModel, previousResponseId);
       // The run's tools stay declared on every step (undefined means "all registered tools", the AI
       // SDK's activeTools contract), so narrowing never changes the cached prompt prefix. Tools that
       // prepareStep removes after a step are enforced once the model replies: each gets a rejection
@@ -357,7 +354,8 @@ async function executeAgentStep<TParameters extends AgentParameters>(
         withModelConfig({
           // Model settings
           model: getModel(stepModel, {
-            ...runtimeIdentity,
+            // Describes the workspace when the step declares bash.
+            files: host.files,
             onToolFraming: ({ framing }) => { stepToolFraming = framing; },
             // Provider guidance names these as what ends the turn. Passed unfiltered: each
             // middleware intersects them with the run's declared tools, so its text stays stable on

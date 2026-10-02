@@ -11,9 +11,9 @@ import type { VoxContext } from '../../infra/vox-context.js';
 import type { ResolvedFilesConfig } from '../../types/config.js';
 import { workspaceCwd, workspaceScratchPath, type WorkspaceExecResult } from '../workspace/player-workspace.js';
 import { createSimpleTool } from './simple-tools.js';
+import { bashToolName } from './tool-names.js';
 
-/** The registered name of the workspace tool. */
-export const bashToolName = 'bash';
+export { bashToolName } from './tool-names.js';
 
 /**
  * Count the model steps that called bash, including invalid calls. A step with several bash
@@ -32,7 +32,7 @@ function describeMounts(files: ResolvedFilesConfig): string[] {
   for (const [name, access] of Object.entries(files.shared)) {
     lines.push(`- ${workspaceCwd}/shared/${name} (${access}): shared across games and seats`);
   }
-  lines.push(`- ${workspaceScratchPath} (write): your scratch space, kept until the game ends`);
+  lines.push(`- ${workspaceScratchPath} (write): scratch space shared by your civilization's agents, kept for this game`);
   return lines;
 }
 
@@ -60,7 +60,7 @@ export function createBashTool<TParameters extends AgentParameters>(context: Vox
       ...describeMounts(files),
       'Files written anywhere else disappear after the call. There is no network, Python, or JavaScript.',
       'Available commands include ls, cat, head, tail, grep, rg, sed, awk, find, sort, jq, sqlite3, and tee. Write files with heredocs.',
-      `You may use bash in up to ${files.quota} responses per task. Commands are cheap but each response is costly, and all bash calls in one response count once, so issue independent commands as parallel calls in the same response or combine them in one script.`,
+      `You can use bash in up to ${files.quota} rounds per task. All bash calls you make together in one round count once, so make independent calls together in the same round or combine them in one script.`,
       'Returns stdout, stderr, and exitCode; long output is truncated.',
     ].join('\n'),
     inputSchema: z.object({
@@ -68,7 +68,7 @@ export function createBashTool<TParameters extends AgentParameters>(context: Vox
     }),
     execute: async (input, parameters) => {
       if (!context.bashOpen) {
-        return failure(`The workspace is closed: this task used all ${files.quota} of its bash responses. Finish with the other tools.`);
+        return failure(`The workspace is closed: this task used all ${files.quota} of its bash rounds. Finish with the other tools.`);
       }
       let workspace;
       try {

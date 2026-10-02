@@ -28,16 +28,13 @@ export const ReasoningEfforts = ['minimal', 'low', 'medium', 'high', 'max'] as c
 export type ReasoningEffort = typeof ReasoningEfforts[number];
 
 /** Provider-independent capabilities accepted by the `hostTools` model option. */
-export const hostMetaTools = ['Read', 'Write', 'Web'] as const;
+export const hostMetaTools = ['Web'] as const;
 
 /** One provider-independent host capability. */
 export type HostMetaTool = (typeof hostMetaTools)[number];
 
-/** Sentinel that enables every host meta-tool. */
-export const everythingHostTools = 'everything';
-
 /** A validated host meta-tool selection. */
-export type HostTools = HostMetaTool[] | [typeof everythingHostTools];
+export type HostTools = HostMetaTool[];
 
 /**
  * LLM model configuration for backend processing
@@ -53,12 +50,10 @@ export interface LLMConfig {
     reasoningEffort?: ReasoningEffort;
     systemPromptFirst?: boolean;
     /**
-     * Host meta-tools to enable for providers that can execute local capabilities.
-     * Undefined or empty means none. Valid entries are 'Read', 'Write', and 'Web';
-     * ['everything'] enables all three, Write implies Read, and any other name
-     * fails fast. Claude Code expands each meta-tool to its vetted non-shell tool
-     * set, while Codex maps Write to a workspace-write sandbox and Web to live
-     * search. File writes stay confined to a game-and-player working directory.
+     * Host meta-tools for providers that execute their own capabilities
+     * (Codex, Claude Code). Undefined or empty means none. Only 'Web' is
+     * accepted; any other entry fails fast. File access comes from the seat
+     * `files` setting and the `bash` tool for every provider, not from here.
      */
     hostTools?: HostTools;
     /**
@@ -225,7 +220,7 @@ export interface FilesConfig {
   game?: FileAccess | false;
   /** Named cross-game folders, each with its access. */
   shared?: Record<string, FileAccess>;
-  /** Bash calls allowed per agent run. */
+  /** Model steps of one agent execution that may call bash; parallel calls in one step count once. */
   quota?: number;
 }
 

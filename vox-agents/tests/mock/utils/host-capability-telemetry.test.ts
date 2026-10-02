@@ -12,24 +12,19 @@ function model(provider: Model['provider'], hostTools?: string[]): Model {
 describe('hostCapabilityTelemetryAttributes', () => {
   it('does not add the attribute when no host capability is enabled', () => {
     expect(hostCapabilityTelemetryAttributes(model('codex'))).toEqual({});
+    expect(hostCapabilityTelemetryAttributes(model('codex', []))).toEqual({});
   });
 
-  it('records Write with its implied Read capability', () => {
-    expect(hostCapabilityTelemetryAttributes(model('claude-code', ['Write']))).toEqual({
-      'host.capability': 'read, write',
+  it('records web for a CLI provider with Web enabled', () => {
+    expect(hostCapabilityTelemetryAttributes(model('codex', ['Web']))).toEqual({
+      'host.capability': 'web',
     });
-  });
-
-  it('expands everything and preserves individual Read and Web selections', () => {
-    expect(hostCapabilityTelemetryAttributes(model('codex', ['everything']))).toEqual({
-      'host.capability': 'read, write, web',
-    });
-    expect(hostCapabilityTelemetryAttributes(model('codex', ['Read', 'Web']))).toEqual({
-      'host.capability': 'read, web',
+    expect(hostCapabilityTelemetryAttributes(model('claude-code', ['Web']))).toEqual({
+      'host.capability': 'web',
     });
   });
 
   it('does not report host capabilities for providers that cannot enable them', () => {
-    expect(hostCapabilityTelemetryAttributes(model('openai', ['everything']))).toEqual({});
+    expect(hostCapabilityTelemetryAttributes(model('openai', ['Web']))).toEqual({});
   });
 });

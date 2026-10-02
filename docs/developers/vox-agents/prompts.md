@@ -146,7 +146,7 @@ The requirement lives here rather than in provider middleware, so every provider
 
 ```
 outermost
-  │ host capability text      (Codex, Claude Code with hostTools)
+  │ capability text           (bash workspace, or Web on Codex or Claude Code)
   │ tool middleware           prompt mode, gemma, or default rescue
   │ Claude Code demotion      (Claude Code only)
   │ think-tag extraction      (thinkMiddleware option)
@@ -160,7 +160,7 @@ What each one adds to the prompt:
 
 | Middleware | File | Adds or changes |
 | --- | --- | --- |
-| Host capability | `utils/models/providers/host-capability-prompt.ts` | Appends an `# Extra Capabilities` section to the first system message, naming the enabled Read, Write, and Web capabilities and the completion tools to call after them. |
+| Capabilities | `utils/models/capability-prompt.ts` | Appends an `# Extra Capabilities` section to the first system message: a Workspace section when files are on and the request declares `bash` (any provider), a Web section for Codex or Claude Code with Web on, and the completion tools to call after them. |
 | Tool rescue, prompt mode | `utils/models/tool-rescue/` (see below) | Replaces the native tool block with a text schema block and rewrites earlier tool calls as text. |
 | Tool rescue, default | `utils/models/tool-rescue/middleware.ts` | Changes no prompt text. It only recovers calls a model wrote as JSON text instead of a native call. |
 | Gemma | `hermesToolMiddleware` from `@ai-sdk-tool/parser` | Hermes-style tool block for Gemma models. |
@@ -228,7 +228,7 @@ Claude Code flattens the whole prompt into one CLI user message per step, so it 
 | Which tools an agent has | That agent's `getActiveTools()` | Adding a tool here changes every request's prefix. |
 | Limiting tools for a whole run | That agent's `getRunTools()` | Decided from the run's input before the first step. The model sees only these tools. |
 | Removing tools mid-run | That agent's `prepareStep()`, setting `activeTools` | Only after an earlier step ran, and only removing. The removed tools stay declared, and the policy sentence is added automatically. |
-| Which calls end the turn | The agent's `completionTools` | Read by `stopCheck`, the finalize nudge, required-tool-choice text, and host-capability text. |
+| Which calls end the turn | The agent's `completionTools` | Read by `stopCheck`, the finalize nudge, required-tool-choice text, and capability text. |
 | Finalize nudge wording | `buildCompletionToolsNudge` in `utils/tools/tool-names.ts` | |
 | Narrowed-step policy wording | `buildToolPolicyReminder` in `utils/tools/tool-names.ts` | |
 | How the closing reminder combines sentences | `buildClosingReminder` in `utils/tools/tool-names.ts`; per-agent override of `continuationNudge` in `infra/vox-agent.ts` | |
@@ -236,7 +236,7 @@ Claude Code flattens the whole prompt into one CLI user message per step, so it 
 | Empty-reply rescue wording | `buildRescuePrompt` in `utils/models/text-cleaning.ts` | Triggered from `VoxAgent.prepareStep`. |
 | Tool requirement wording | `buildToolRequirementReminder` in `utils/tools/tool-names.ts` | Part of the closing reminder on every `required` step, for every provider. |
 | Completion-tool sentence (Anthropic, Codex) | `completionToolsInstruction` in `utils/models/providers/required-tool-choice.ts` | Must not depend on the tool choice. |
-| Extra Capabilities section | `hostCapabilityInstruction` in `utils/models/providers/host-capability-prompt.ts` | |
+| Extra Capabilities section | `capabilityInstruction` in `utils/models/capability-prompt.ts` | |
 | Prompt-mode schema block | `createToolPrompts` in `utils/models/tool-rescue/prompt.ts` | Keep it in step with `buildToolCallArraySchema` and `formatToolCallText`; the recovery parser depends on the same shape. |
 | Which models use prompt mode | `options.toolMiddleware` in the model config; defaults in `utils/models/rules.ts` | |
 | A shared list format ("`a`, `b`, or `c`") | `formatToolChoiceList` in `utils/tools/tool-names.ts` | Used by every builder above. |
@@ -269,4 +269,4 @@ Tests check behavior and compose expected text through the same builders, so edi
 | Required-tool-choice conversion and completion-tool text | `utils/providers/required-tool-choice.test.ts` |
 | Prompt-mode schema block | `utils/tool-rescue-prompt.test.ts` |
 | Rescue of required tool calls | `infra/required-tool-rescue.test.ts` |
-| Host capability text | `utils/providers/host-capability-prompt.test.ts` |
+| Capability text | `utils/capability-prompt.test.ts` |
