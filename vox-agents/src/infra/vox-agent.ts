@@ -14,7 +14,8 @@ import type { VoxContext } from "./vox-context.js";
 import type { ExecuteTokenOutput } from "./vox-run.js";
 import { getModelConfig, type ModelSize, resolveToolFraming, selectModelReference } from "../utils/models/models.js";
 import { getValidCalls, hasOnlyTerminalCalls, isTerminalTool } from "../utils/tools/terminal-tools.js";
-import { buildClosingReminder } from "../utils/tools/tool-names.js";
+import { buildClosingReminder } from "../utils/prompts/closing-reminder.js";
+import { bashToolName } from "../utils/tools/tool-names.js";
 import { buildRescuePrompt } from "../utils/models/text-cleaning.js";
 import { appendReminder } from "../utils/prompts/reminders.js";
 // @ts-expect-error - jaison doesn't have type definitions
@@ -145,7 +146,7 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
 
   /**
    * When true, a step whose terminal/completion intent was MALFORMED (an invalid tool call that never
-   * executed) does NOT end the turn — the agent keeps working (below {@link maxSteps}) so the model can
+   * executed) does NOT end the turn — the agent keeps working (below {@link stepLimit}) so the model can
    * redo the call. Default false: non-live agents keep the "a terminal call ends the turn" rule. The
    * keep-working logic lives once on the base ({@link retriesMalformedTerminal}) and is applied by
    * {@link stopCheck} here (and by `LiveEnvoy.stopCheck`, which supplies its completion-tool set).
@@ -159,9 +160,33 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   public fireAndForget: boolean = false;
 
   /**
-   * Maximum steps before forced stop (default: 3)
+   * Maximum steps before forced stop (default: 3). See {@link stepLimit} for the limit with files on.
    */
   public maxSteps: number = 3;
+
+  /**
+   * The step limit for one execution: {@link maxSteps}, raised to the files quota when the
+   * context's files setting is on, so workspace work and the final decision share one budget.
+   *
+   * @param context - The VoxContext of the execution
+   */
+  public stepLimit(context: VoxContext<TParameters>): number {
+    return context.files ? Math.max(this.maxSteps, context.files.quota) : this.maxSteps;
+  }
+
+  /**
+   * Whether an execution has used its whole {@link stepLimit}, logging a warning when it has. Stop
+   * checks use this as their hard ceiling so a runaway loop always ends.
+   *
+   * @param allSteps - All steps executed so far
+   * @param context - The VoxContext of the execution
+   */
+  protected reachedStepLimit(allSteps: unknown[], context: VoxContext<TParameters>): boolean {
+    const limit = this.stepLimit(context);
+    if (allSteps.length < limit) return false;
+    this.logger.warn(`Reached maximum step limit (${limit}), stopping agent`);
+    return true;
+  }
 
   /**
    * Tool names whose successful call completes this agent's run — the single source of truth for
@@ -179,14 +204,15 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
    * tool choice is `required`, it says the model must call tools; this lives here, not in provider
    * middleware, so the system text stays the same when a step drops to auto. When the step is
    * `narrowed` (some of the run's tools were removed but stay declared), it names the allowed tools
-   * and says other calls will error. From the second step on it also
+   * and says other calls will error. With `stepsLeft` (set when files are on) it counts down the
+   * steps left for the final decision. From the second step on it also
    * nudges the model to finalize with the {@link completionTools} that are allowed, so it never names
    * a tool the model cannot run. Return undefined to add nothing (e.g. a replay agent that must not
    * perturb the reproduced prompt).
    */
   public continuationNudge(
     _parameters: TParameters,
-    step: { executable: string[]; narrowed: boolean; step: number; required: boolean },
+    step: { executable: string[]; narrowed: boolean; step: number; required: boolean; stepsLeft?: number },
   ): string | undefined {
     return buildClosingReminder(step.executable, this.completionTools, step);
   }
@@ -292,9 +318,10 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
 
   /**
    * Gets the tools declared to the model for one run, resolved once before the first step. Defaults
-   * to {@link getActiveTools}; override to restrict a whole run by its input (e.g. a special message
-   * that may only be answered by speaking). The list never changes within the run, so the cached
-   * prompt prefix stays the same across steps.
+   * to {@link getActiveTools}, plus `bash` when the seat has files on and that list is non-empty
+   * (undefined already means all registered tools). Override to restrict a whole run by its input
+   * (e.g. a special message that may only be answered by speaking); a restricted list leaves bash
+   * out. The list never changes within the run, so the cached prompt prefix stays the same across steps.
    *
    * @param parameters - The execution parameters
    * @param input - The agent input for this execution
@@ -304,14 +331,16 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   public async getRunTools(
     parameters: TParameters,
     _input: TInput,
-    _context: VoxContext<TParameters>
+    context: VoxContext<TParameters>
   ): Promise<string[] | undefined> {
-    return this.getActiveTools(parameters);
+    const tools = this.getActiveTools(parameters);
+    if (!tools?.length || !context.tools[bashToolName] || tools.includes(bashToolName)) return tools;
+    return [...tools, bashToolName];
   }
   
   /**
    * The shared keep-working rule for {@link retryMalformedTerminalCalls}. When the flag is on and the
-   * turn is still below {@link maxSteps}, a last step whose terminal/completion intent was MALFORMED —
+   * turn is still below {@link stepLimit}, a last step whose terminal/completion intent was MALFORMED —
    * an invalid tool call that never executed, with `isCompletion` deciding which tool names are
    * terminal for THIS agent — must NOT end the turn, so the model can redo the call on the next step
    * (the SDK feeds the tool-error back). Returns true only when the caller should force another step;
@@ -321,11 +350,12 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   protected retriesMalformedTerminal(
     lastStep: StepResult<Record<string, Tool>>,
     allSteps: StepResult<Record<string, Tool>>[],
+    context: VoxContext<TParameters>,
     isCompletion: (toolName: string) => boolean
   ): boolean {
     return (
       this.retryMalformedTerminalCalls &&
-      allSteps.length < this.maxSteps &&
+      allSteps.length < this.stepLimit(context) &&
       lastStep.toolCalls.some((call) => call.invalid && isCompletion(call.toolName))
     );
   }
@@ -349,7 +379,7 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
   ): boolean {
     // A malformed terminal call keeps the turn open for agents that opt in (default off, so this is a
     // no-op for existing agents). Checked first so a redo isn't lost to a same-step valid terminal call.
-    if (this.retriesMalformedTerminal(lastStep, allSteps, (name) => isTerminalTool(name, context.mcpToolMap))) {
+    if (this.retriesMalformedTerminal(lastStep, allSteps, context, (name) => isTerminalTool(name, context.mcpToolMap))) {
       return false;
     }
     if (this.completionTools?.length) {
@@ -361,13 +391,13 @@ export abstract class VoxAgent<TParameters extends AgentParameters, TInput = unk
       // Default mode: stop on empty responses or terminal-only calls (invalid calls never
       // execute, so a step carrying only invalid calls counts as empty)
       if (getValidCalls(lastStep).length === 0 && !lastStep.text?.trim()) {
-        return allSteps.length >= this.maxSteps;
+        return this.reachedStepLimit(allSteps, context);
       }
       if (hasOnlyTerminalCalls(lastStep, context.mcpToolMap)) {
         return true;
       }
     }
-    return allSteps.length >= this.maxSteps;
+    return this.reachedStepLimit(allSteps, context);
   }
   
   /**

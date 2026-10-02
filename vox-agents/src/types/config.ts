@@ -214,13 +214,13 @@ export type TriageSetting = boolean | string[];
 /** How a workspace mount may be used from the agent side. */
 export type FileAccess = 'read' | 'write';
 
-/** Workspace file access: the per-game folder, named shared folders, and a bash quota. */
+/** Workspace file access: the per-game folder, named shared folders, and a step quota. */
 export interface FilesConfig {
   /** Access to the game folder; false leaves it unmounted. */
   game?: FileAccess | false;
   /** Named cross-game folders, each with its access. */
   shared?: Record<string, FileAccess>;
-  /** Model steps of one agent execution that may call bash; parallel calls in one step count once. */
+  /** Minimum step limit of one agent execution with files on; an agent whose own limit is higher keeps it. */
   quota?: number;
 }
 

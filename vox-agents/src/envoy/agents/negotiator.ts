@@ -117,9 +117,9 @@ export class Negotiator extends VoxAgent<StrategistParameters, NegotiatorInput, 
     input: NegotiatorInput,
     _lastStep: StepResult<Record<string, Tool>>,
     allSteps: StepResult<Record<string, Tool>>[],
-    _context: VoxContext<StrategistParameters>
+    context: VoxContext<StrategistParameters>
   ): boolean {
-    return input.outcome !== undefined || allSteps.length >= this.maxSteps;
+    return input.outcome !== undefined || this.reachedStepLimit(allSteps, context);
   }
 
   public getActiveTools(_parameters: StrategistParameters): string[] | undefined {

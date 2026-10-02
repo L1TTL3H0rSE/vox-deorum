@@ -1,6 +1,6 @@
 # just-bash workspace for all agents
 
-This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 4 done, including the Node 22.23.3 requirement, the bash quota check from Step 5, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
+This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 5 done, including the Node 22.23.3 requirement, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
 
 ## Context
 
@@ -13,11 +13,11 @@ We will give every tool-using agent of a seat, on any provider, a `bash` tool ba
 - A seat setting `files` turns file access on for every tool-using agent of that seat, whatever the provider.
 - All agents of one player in one game share one folder: `<telemetryDir>/workspaces/games/<gameID>-player-<playerID>/`.
 - Optional named shared folders persist across games: `<telemetryDir>/workspaces/shared/<name>/`.
-- Agents get a `bash` tool, a system prompt on how to use the workspace, and a continuation nudge that allows workspace work while still steering toward completion.
-- Bash joins each tool-using agent's declared tools and stays declared for the whole run, so closing the workspace does not change the declarations or the cached prefix.
-- Without `files`, workspace step exemptions and compaction stay off. Tool failures still obey the existing step limits and malformed-call retry rules.
+- Agents get a `bash` tool, a system prompt on how to use the workspace, and a closing reminder that counts down the steps left for the final decision.
+- Bash joins each tool-using agent's declared tools and stays declared for the whole run, so the declarations and the cached prefix do not change between steps. Runs an agent restricts on purpose, such as a live envoy's greeting, leave it out.
+- Without `files`, step limits, the closing reminder, and compaction stay as today.
 - With `files`:
-  - A step that only calls `bash` while the workspace is open does not count toward the agent's step limit. Bash use is bounded by a configurable quota of model steps per agent execution, because commands are cheap and model steps are not. All bash calls in one response count as one step, so agents are pushed to issue parallel calls. The continuation nudge tells the agent how much quota is left. After closure, bash stays listed but returns a failure without running commands, and further bash steps count toward the step limit.
+  - Workspace work and the final decision share one step budget: the agent's step limit becomes `files.quota` unless its own `maxSteps` is higher. Commands are cheap and model steps are not, so agents are pushed to issue parallel calls or one script.
   - A long run compacts itself: old bash output is dropped once the request nears a size threshold, or once after a context-length error.
   - Anthropic-family requests mark the run's initial prompt (instructions plus game state) for caching, so eligible later steps can reuse it. Cache expiration and provider admission can still cause a fresh write. Claude Code caching is left as an open question (Step 7).
 - `hostTools` accepts only whitelist entries (`Web`). Unsupported entries throw the normal validation error; there is no migration handling.
@@ -33,7 +33,7 @@ One setting, `files`, resolved like `triage`: seat (`llmPlayers.<n>.files`), els
 "files": {
   "game": "write",                  // false | "read" | "write" (default false)
   "shared": { "lessons": "write", "reference": "read" },  // name -> "read" | "write"
-  "quota": 20                       // model steps per agent execution that may call bash (default 20)
+  "quota": 20                       // step limit of one agent execution, unless maxSteps is higher (default 20)
 }
 ```
 
@@ -78,7 +78,7 @@ Virtual layout seen by the agent (cwd `/workspace`):
 
 Use `just-bash` directly (one dependency), wrapped with `createSimpleTool`. We skip the `bash-tool` package: it adds `readFile`/`writeFile` tools we do not need and a second peer dependency on `ai`, and our wrapper already handles tracing, key normalization, and per-context parameters.
 
-The `bash` tool is registered only when the context's `files` setting is on, and the loop adds it to each tool-using agent's declared tools. Quota closure is covered in Step 5.
+The `bash` tool is registered only when the context's `files` setting is on, and the loop adds it to each tool-using agent's declared tools. The step budget is covered in Step 5.
 
 ## Steps
 
@@ -137,14 +137,11 @@ Other findings that shape Step 2:
   - Guide seeding: copy the create-once logic from `seedHostWorkspaceGuide` (`flag: 'wx'`, ignore `EEXIST`, log other errors) here; Step 3 deletes the original. Seed `AGENTS.md` at each writable game or shared root, not in scratch. The game guide keeps today's content (notes vs snapshots; observations vs inferences vs plans; current tools override stale notes; no untrusted text in the guide) minus the CLI shell-policy section. The shared guide says the folder outlives the game and is seen by other seats and games, so it holds generalized lessons and reusable references, never current-game state.
 - `VoxContext`: cache `PlayerWorkspace` instances by `gameID-playerID` so all agents of a seat share one.
 - New `utils/tools/bash-tool.ts`:
-  - `bashToolName = 'bash'` and `bashStepsUsed(steps)`, which counts the steps with at least one bash call, valid or invalid.
-  - `createBashTool(context)` via `createSimpleTool`. Name `bash`, input `{ Command: string }`. The description lists the mounts with their access, the main commands (ls, cat, grep, rg, sed, awk, find, jq, sqlite3, tee, heredocs), and the quota in responses, and says to issue independent commands as parallel calls or one script.
-  - Execute first reads `context.bashOpen`. When closed, it returns a failure result without resolving the workspace or running a command. Otherwise it resolves the workspace from `parameters.gameID`/`playerID`, turns a workspace that cannot be created into a failure result, and passes `context.currentSignal()`.
-- Quota check (the enforcement part of Step 5):
-  - `ExecutionFrame.bashOpen` in `infra/vox-run.ts`, read and set through `VoxContext.bashOpen`. Nested and concurrent executions each own their value; outside the step loop it reads as open.
-  - `executeAgentStep` sets it before each model call to `bashStepsUsed(allSteps) < files.quota` and leaves it alone through the step, so every bash call in one response runs even when they overshoot.
+  - `bashToolName = 'bash'` (defined in `tool-names.ts` so provider middleware can name it).
+  - `createBashTool(context)` via `createSimpleTool`. Name `bash`, input `{ Command: string }`. The description lists the mounts with their access and the main commands (ls, cat, grep, rg, sed, awk, find, jq, sqlite3, tee, heredocs), says each round of bash calls uses a step of the budget, and says to issue independent commands as parallel calls or one script.
+  - Execute resolves the workspace from `parameters.gameID`/`playerID`, turns a workspace that cannot be created into a failure result, and passes `context.currentSignal()`.
 - `VoxContext.registerAgentTools`: when `this.files` is set, register `this.tools.bash = createBashTool(this)`.
-- Tests: `tests/mock/utils/workspace.test.ts`, `tests/mock/utils/tools/bash-tool.test.ts`, and `tests/mock/context/vox-execute-bash-quota.test.ts`. The tests that write to disk skip on Node older than 22.17.0.
+- Tests: `tests/mock/utils/workspace.test.ts` and `tests/mock/utils/tools/bash-tool.test.ts`. The tests that write to disk skip on Node older than 22.17.0.
 
 Steps 3 to 5 change shared signatures and must land together; the build is expected to pass only after all three.
 
@@ -165,22 +162,22 @@ Steps 3 to 5 change shared signatures and must land together; the build is expec
   - The Web sentence stays, only for Codex/Claude Code with `hostTools: ['Web']`.
 - `getModel`: install the middleware outermost for any provider when `files` is set, or for a CLI provider when Web is on.
 
-### 5. Step counting, bash quota, nudge
+### 5. Step budget and reminder (done)
 
-Two rules apply when `files` is enabled. Without files, every step counts as today, including an invalid call that names an unavailable `bash` tool:
+With `files` on, one step budget covers workspace work and the final decision. Without files, every limit stays as today.
 
-1. A free workspace step contains at least one tool call, every call is `bash` (valid or invalid), and the execution had quota remaining at the start of that step. Empty, text-only, mixed, and post-closure steps count toward `maxSteps`.
-2. Bash is bounded by `files.quota` model steps per agent execution (default 20). A step uses one unit of quota when it emits at least one bash call, including malformed calls and mixed steps, however many bash calls it has. All commands in a step that starts with quota remaining run. Later steps keep bash listed, but it returns a failure without executing commands. Rule 2 is already enforced (Step 2); this step adds rule 1 and the reminders.
-
-- `utils/tools/bash-tool.ts` also exports `isWorkspaceStep(step)` (at least one call and all names are bash).
-- `infra/vox-agent.ts`: `protected countedSteps(allSteps, files?)` scans steps in order, tracking bash steps before each step. Exempt a workspace step only when files are enabled and that prior count is below the quota. Base `stopCheck` and `retriesMalformedTerminal` compare this count with `maxSteps`; pass `context.files` through the retry helper.
-- `LiveEnvoy.stopCheck` and `Negotiator.stopCheck`: the same swap, using `context.files`.
-- `Briefer.stopCheck`: accept the context argument, replace the hard-coded 3 with the same counted limit (the base default is already 3), and skip only free workspace steps when scanning for briefing text, so "checking notes" plus an admitted bash call does not end the briefing. Share the eligibility calculation with step counting.
-- `executeAgent`, after `getRunTools` resolves the run's tools: when `host.tools.bash` exists, add `'bash'` to a copied non-empty list, so bash is declared for the whole run. `executeAgentStep` also adds it to a copied non-empty executable list when `prepareStep` returns one, regardless of remaining quota. `undefined` already means all registered tools and includes bash; an explicit empty executable list stays empty. Avoid duplicate names. `toolChoice` keeps following the original executable list.
-- Compute `left = Math.max(0, files.quota - bashStepsUsed(allSteps))` before the model call for the nudge. `context.bashOpen` should also require that bash is executable on the step.
+- `infra/vox-agent.ts`:
+  - `stepLimit(context)` returns `Math.max(maxSteps, files.quota)` when files are on, else `maxSteps`.
+  - `reachedStepLimit(allSteps, context)` is the shared hard ceiling: it logs a warning and returns true once the limit is used. The base `stopCheck`, `LiveEnvoy`, `Negotiator`, and `Briefer` all end through it. `retriesMalformedTerminal` takes the context and compares against `stepLimit`.
+  - `Telepathist` drops its copy of the base stop check and sets `maxSteps = 50`.
+  - `Envoy.recordStep` holds the thread-recording half of `Envoy.stopCheck`, so `LiveEnvoy` records without running (and logging) the base check.
+- `Briefer.stopCheck` ignores text from a step that also calls bash, so "checking notes" plus a bash call does not end the briefing.
+- The base `VoxAgent.getRunTools`: when the context registered bash, add it to a non-empty `getActiveTools()` list. `undefined` already means all registered tools; an empty list stays empty, so `toolChoice` is unchanged. Overrides that restrict a whole run (a live envoy's greeting, a telepathist's special message) leave bash out. A `prepareStep` list is not extended, so removing bash there works like removing any other tool.
+- The bash closure (`bashOpen`, `bashStepsUsed`) is gone: the step limit already bounds bash.
 - Reminders:
-  - The capability prompt (Step 4) states the run's quota.
-  - The loop composes the agent's continuation nudge with one sentence naming `left` and saying to finish with the completion tools. When bash is active and `left` is 0, it says the workspace is closed for this run and further calls return a failure. The builder sits next to `buildCompletionToolsNudge` in `tool-names.ts`.
+  - The capability prompt and the bash description say each round of bash calls uses a step of the budget, without a number, so they stay byte-stable.
+  - With files on, `executeAgentStep` passes `stepsLeft = stepLimit - steps so far` to `continuationNudge`, and the closing reminder template (`buildClosingReminder` in `utils/prompts/closing-reminder.ts`) adds a steps-left line on every step, or a last-step line at 1.
+- Tests: `tests/mock/context/vox-execute-step-budget.test.ts` (quota raises the limit, a higher `maxSteps` wins, no change without files, countdown per step, bash declared only with files, an empty list stays empty, Briefer ignores text next to bash).
 
 ### 6. Auto compaction within a run
 
@@ -203,7 +200,7 @@ Pulled from the sibling plan `docs/plans/context-continuity.md` (threshold, 75 p
 
 Multi-step runs become likely with files, so mark the run's initial prompt (agent instructions, game context, game state) for reuse on later eligible steps. Without `files`, this extra initial-message breakpoint is not added.
 
-Quota closure keeps the bash definition and static capability instruction unchanged. Remaining quota and closure notices live in the uncached tail and tool results. Changes to model, tool choice, output schema, reasoning settings, host capabilities, or cached instructions can still invalidate some or all of the prefix. Stable definitions preserve cache eligibility; they do not guarantee a cache hit.
+The bash definition and capability instruction carry no step counts. The steps-left countdown lives in the uncached tail. Changes to model, tool choice, output schema, reasoning settings, host capabilities, or cached instructions can still invalidate some or all of the prefix. Stable definitions preserve cache eligibility; they do not guarantee a cache hit.
 
 - Move `MAX_CACHE_BREAKPOINTS` and `markBreakpointOnLast` from `envoy/envoy.ts` to the existing `utils/models/cache-breakpoint.ts`, alongside `cacheBreakpoint`, so `infra/` does not import from `envoy/`. Envoy imports them from there; its strategy note stays in `envoy.ts`. Keep the existing five-minute TTL and correct that module's stale one-hour comment.
 - `executeAgent` (`vox-execute.ts`): after `messages.push(...prepared.messages)`, when `host.files` is set, mark the last initial message as a breakpoint. Skip it if that message is already marked (live envoys often end on an anchor) or the request already has `MAX_CACHE_BREAKPOINTS`. The marker sits in the history, so it is byte-stable across steps. It is ignored by non-Anthropic providers, so no provider check is needed.
@@ -218,21 +215,21 @@ Quota closure keeps the bash definition and static capability instruction unchan
 - `utils/telemetry/host-capabilities.ts`: `hostCapabilityTelemetryAttributes(model, files)` lists `read`/`write` from the context's files for any provider (`write` when any mount is writable) plus `web` for CLI providers. Non-CLI providers now emit `host.capability` when files are on.
 - Done in Step 2: `web/routes/telemetry.ts` skips the top-level `workspaces` folder in the `/databases` scan.
 - Local config (gitignored, done for the user, not committed): seat 0 `files: "write"` + `hostTools: ["Web"]`; seat 7 `files: "write"`, no `hostTools`.
-- Docs: the `files` setting, folder layout, access, quota, and cross-seat caveat already have a section in `docs/players/configuration.md` and a paragraph in `docs/developers/vox-agents/overview.md`. Rewrite the host-tools paragraphs there (free workspace steps, nudge, auto compaction and `continuityThreshold`, caching with files on, Web-only CLI tools, cross-seat caveat) and the matching paragraph in `docs/players/configuration.md`, including the breaking `hostTools` change. Add one bullet on `files` to the Critical Conventions in `vox-agents/AGENTS.md`.
+- Docs: the `files` setting, folder layout, access, quota, and cross-seat caveat already have a section in `docs/players/configuration.md` and a paragraph in `docs/developers/vox-agents/overview.md`. Rewrite the host-tools paragraphs there (step budget, steps-left reminder, auto compaction and `continuityThreshold`, caching with files on, Web-only CLI tools, cross-seat caveat) and the matching paragraph in `docs/players/configuration.md`, including the breaking `hostTools` change. Add one bullet on `files` to the Critical Conventions in `vox-agents/AGENTS.md`.
 - Tests (Vitest, behavior not wording):
   - Update: `tests/mock/utils/providers/host-tools.test.ts`, `host-capability-prompt.test.ts` (move to match the new module), `codex.test.ts`, `tests/mock/utils/models.test.ts`, `tests/mock/utils/host-capability-telemetry.test.ts`, `tests/mock/utils/concurrency-batch-guard.test.ts`, `tests/mock/infra/continuation-nudge.test.ts`, `tests/mock/web/routes/telemetry-routes.test.ts` (workspace `.db` files are not listed).
   - `tests/mock/strategist/seat-config.test.ts`: `resolveSeatFiles` precedence, shorthand, invalid values and names.
   - Config-loading tests: a real root config's `files` value survives both `loadVoxConfig` and the final runtime config construction; seat and session precedence still applies.
   - Done in Step 2: `tests/mock/utils/workspace.test.ts` against a temp telemetry dir: a write in `/workspace/game` lands on disk; a second `PlayerWorkspace` for the same player sees it; a different player does not; read mounts reject writes; a shared folder is visible from two games; escape attempts fail; guides are created once and never overwritten; `/tmp` lasts for one player through the game and nothing else survives a command.
   - Done in Step 1: `seat-config.test.ts` also covers `quota` default and validation.
-  - Step-loop tests: bash becomes executable only with files and a non-empty execution list (`undefined` allows all registered tools; `[]` allows none while retaining declarations); bash remains offered after quota exhaustion (the failure without command execution, parallel calls in one admitted step, and per-execution quotas are already covered by `vox-execute-bash-quota.test.ts`); the nudge carries the remaining count (checked through a controlled quota, not wording). Bash-only steps with quota remaining do not count toward `maxSteps` for the base agent, LiveEnvoy, and Negotiator; invalid bash calls use a quota step; repeated calls after closure hit `maxSteps`; empty, text-only, and mixed steps count; an invalid bash call without files counts as today; a malformed terminal call still retries; Briefer does not stop on a text-plus-bash step admitted before closure. Existing stop-check tests pass unchanged.
+  - Done in Step 5: step-budget tests in `vox-execute-step-budget.test.ts`. Existing stop-check tests pass unchanged.
   - Compaction (`tests/mock/utils/message-history.test.ts` plus a step-loop case): old bash outputs are stubbed and the latest step's kept; non-bash results and messages before the anchor are unchanged; only the latest reasoning survives; inputs are not mutated; tool-result and retained-reasoning growth increase the request estimate; bash output growth alone crosses the reminder and compaction thresholds; one reminder at 75 percent; a first overflow compacts and retries, a second fails as today; without files an overflow behaves as today.
-  - Caching: with files on, the last initial message gets one breakpoint and the count never exceeds `MAX_CACHE_BREAKPOINTS`; compare captured provider requests before and after quota exhaustion to verify the bash definition and cached instructions stay identical, with closure only in the uncached tail. Without files no extra breakpoint is added; stable declarations and execution guards still apply. Envoy breakpoint tests keep passing after the move.
+  - Caching: with files on, the last initial message gets one breakpoint and the count never exceeds `MAX_CACHE_BREAKPOINTS`; compare captured provider requests across steps to verify the bash definition and cached instructions stay identical, with the countdown only in the uncached tail. Without files no extra breakpoint is added; stable declarations and execution guards still apply. Envoy breakpoint tests keep passing after the move.
 
 ## Risks and open questions
 
 - `ReadWriteFs` writes fail on Windows with Node older than 22.17.0 (see Step 0). The repo now requires 22.23.3, but a developer or player on an older system Node still gets only an `npm` warning, so the workspace checks the version itself. Containment passed the spike on Windows.
-- Each bash step is a full model round trip, which costs latency compared with CLI-internal tools. The tool description pushes parallel calls and batching, and caching keeps the repeated prefix cheap. The default quota of 20 is a starting point to tune from telemetry.
+- Each bash step is a full model round trip, which costs latency compared with CLI-internal tools. The tool description pushes parallel calls and batching, and caching keeps the repeated prefix cheap. The default budget of 20 steps is a starting point to tune from telemetry.
 - Compaction stubs old bash output; an agent that never saved notes may re-run commands. The 75 percent reminder is the mitigation.
 - Threshold compaction rewrites tool traffic after the cache anchor, so the tail after it is re-written to cache once.
 - With files on, step 1 pays the cache-write premium on the whole initial prompt (1.25x on Anthropic) even when the run ends in one step.
@@ -243,9 +240,9 @@ Quota closure keeps the bash definition and static capability instruction unchan
 ## Verification
 
 1. `npm run build:all` and `npm run test:all` from the repo root.
-2. Manual: run the files-enabled config with `npm run strategist` for a few turns, once on a cheap OpenRouter model and once on Codex. Confirm `telemetry/workspaces/games/<game>-player-0/AGENTS.md` exists, notes appear, the strategist still finishes with `set-flavors` or `keep-status-quo`, and step spans show `bash` tool spans and `host.capability`. On an Anthropic-family model with a cache-eligible prompt, stable tools and instructions, and steps within the five-minute TTL, inspect `tokens.input.cached` for initial-prompt reuse, including after workspace closure. Record misses and rewrites separately from definition stability.
+2. Manual: run the files-enabled config with `npm run strategist` for a few turns, once on a cheap OpenRouter model and once on Codex. Confirm `telemetry/workspaces/games/<game>-player-0/AGENTS.md` exists, notes appear, the strategist still finishes with `set-flavors` or `keep-status-quo`, and step spans show `bash` tool spans and `host.capability`. On an Anthropic-family model with a cache-eligible prompt, stable tools and instructions, and steps within the five-minute TTL, inspect `tokens.input.cached` for initial-prompt reuse across steps. Record misses and rewrites separately from definition stability.
 3. Confirm host-tool validation throws for entries outside the `Web` whitelist, including `Read`, `Write`, and `everything`.
-4. Run one seat with `files: { "game": "write", "quota": 2 }` and a low `continuityThreshold` (for example 20,000) on a cheap model. Bash stays listed after the quota is used, but further calls return a failure and leave workspace files unchanged. Further bash-only steps count toward `maxSteps`, and a step span shows `step.compacted` when output growth crosses the threshold.
+4. Run one seat with `files: { "game": "write", "quota": 8 }` and a low `continuityThreshold` (for example 20,000) on a cheap model. The closing reminder counts down from 8, the run ends by step 8, and a step span shows `step.compacted` when output growth crosses the threshold.
 
 ## Out of scope
 

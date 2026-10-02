@@ -129,6 +129,19 @@ export abstract class Envoy<TParameters extends AgentParameters = AgentParameter
     allSteps: StepResult<Record<string, Tool>>[],
     context: VoxContext<TParameters>
   ): boolean {
+    this.recordStep(parameters, input, lastStep);
+    return super.stopCheck(parameters, input, lastStep, allSteps, context);
+  }
+
+  /**
+   * Adds a step's response messages to the thread with metadata, stripping echoed turn markers.
+   * Subclasses with their own stop rules call this instead of {@link stopCheck}.
+   */
+  protected recordStep(
+    parameters: TParameters,
+    input: EnvoyThread,
+    lastStep: StepResult<Record<string, Tool>>
+  ): void {
     // Add the messages to the record with metadata
     const currentTurn = parameters.turn;
     const currentDatetime = new Date();
@@ -168,8 +181,6 @@ export abstract class Envoy<TParameters extends AgentParameters = AgentParameter
         }
       });
     });
-
-    return super.stopCheck(parameters, input, lastStep, allSteps, context);
   }
 
   // Special messages

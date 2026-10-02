@@ -7,7 +7,7 @@
  * and provides database-backed context instead of live game state.
  */
 
-import { ModelMessage, StepResult, Tool } from 'ai';
+import { ModelMessage, Tool } from 'ai';
 import { Envoy } from '../envoy/envoy.js';
 import { TelepathistParameters } from './telepathist-parameters.js';
 import { TelepathistTool } from './telepathist-tool.js';
@@ -17,7 +17,6 @@ import { GetConversationLogTool } from './tools/get-conversation-log.js';
 import { runPreparation } from './preparation/index.js';
 import { EnvoyThread } from '../types/index.js';
 import { VoxContext } from '../infra/vox-context.js';
-import { getValidCalls, hasOnlyTerminalCalls } from '../utils/tools/terminal-tools.js';
 
 /**
  * All available telepathist tool instances
@@ -94,35 +93,8 @@ export abstract class Telepathist extends Envoy<TelepathistParameters> {
     return messages;
   }
 
-  /**
-   * Determines whether the agent should stop execution.
-   * Called after each step to check if the generation should continue.
-   *
-   * @param parameters - The execution parameters
-   * @param lastStep - The most recent step result
-   * @param allSteps - All steps executed so far
-   * @param context - The VoxContext for looking up tool metadata
-   * @returns True if the agent should stop, false to continue
-   */
-  public stopCheck(
-    parameters: TelepathistParameters,
-    input: EnvoyThread,
-    lastStep: StepResult<Record<string, Tool>>,
-    allSteps: StepResult<Record<string, Tool>>[],
-    context: VoxContext<TelepathistParameters>
-  ): boolean {
-    // Add response messages to thread via Envoy.stopCheck (result ignored — custom logic below)
-    super.stopCheck(parameters, input, lastStep, allSteps, context);
-
-    // Telepathist-specific stop conditions (50-step limit vs default 3)
-    if (getValidCalls(lastStep).length === 0 && !lastStep.text?.trim()) {
-      return allSteps.length >= 50;
-    }
-    if (hasOnlyTerminalCalls(lastStep, context.mcpToolMap)) {
-      return true;
-    }
-    return allSteps.length >= 50;
-  }
+  /** Telepathy sessions dig through many turns, so they get a large step limit. */
+  public override maxSteps = 50;
 
   /** Telepathist runs at the default reasoning tier. */
   protected reasoningTier = "default" as const;

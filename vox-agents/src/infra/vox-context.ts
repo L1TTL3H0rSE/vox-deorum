@@ -237,21 +237,6 @@ export class VoxContext<TParameters extends AgentParameters> implements Executio
   }
 
   /**
-   * Whether bash may run commands on the current step of the active execution. The step loop sets
-   * it before each model call from the steps the execution already spent on bash, and holds it
-   * through the step so parallel calls in one response all run. Nested and concurrent executions
-   * each own their value. True when nothing set it, such as a direct tool call outside the loop.
-   */
-  public get bashOpen(): boolean {
-    return this.als.getStore()?.bashOpen ?? true;
-  }
-  public set bashOpen(open: boolean) {
-    const frame = this.als.getStore();
-    if (!frame) throw new Error('VoxContext.bashOpen can only be set inside an active run.');
-    frame.bashOpen = open;
-  }
-
-  /**
    * Resets the cached model identity so it will be re-sent on the next strategist execution.
    * Call this after crash recovery when the game has lost its Lua state.
    */

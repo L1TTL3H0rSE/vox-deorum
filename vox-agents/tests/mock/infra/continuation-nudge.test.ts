@@ -11,8 +11,8 @@
  * These cover the wording produced for a given tool set; that the resolved set is what reaches the
  * hook, and that the reminder is appended once, are covered in context/vox-context-execute-runs.
  *
- * Each expectation composes the wording through the tool-names builders rather than repeating it,
- * so the reminder's prose can be edited in one place.
+ * Expectations check which tools a reminder names and in what order, never its wording, so the
+ * prose in utils/prompts/closing-reminder.ts can be edited freely.
  *
  * Loaded through the agent-registry (the canonical entry) to avoid the circular-import hazard of
  * importing agent modules in isolation.
@@ -21,11 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import '../../../src/infra/agent-registry.js';
 import { agentRegistry } from '../../../src/infra/agent-registry.js';
-import {
-  buildCompletionToolsNudge,
-  buildToolPolicyReminder,
-  buildToolRequirementReminder,
-} from '../../../src/utils/tools/tool-names.js';
+import { formatToolChoiceList } from '../../../src/utils/tools/tool-names.js';
 
 /** A later, unnarrowed step with an auto tool choice that may run `executable`. */
 function later(executable: string[]) {
@@ -35,9 +31,7 @@ function later(executable: string[]) {
 describe('continuationNudge', () => {
   it('derives the default nudge from completionTools (negotiator, inherited)', () => {
     const negotiator = agentRegistry.get('negotiator') as any;
-    expect(negotiator.continuationNudge({}, later(['accept-deal', 'propose-deal', 'reject-deal']))).toBe(
-      buildCompletionToolsNudge(['accept-deal', 'propose-deal', 'reject-deal'])
-    );
+    expect(negotiator.continuationNudge({}, later(['accept-deal', 'propose-deal', 'reject-deal']))).toContain(formatToolChoiceList(['accept-deal', 'propose-deal', 'reject-deal']));
   });
 
   it('derives the strategist nudge from the tools active for its current mode', () => {
@@ -45,28 +39,20 @@ describe('continuationNudge', () => {
     expect(strategist.continuationNudge(
       { mode: 'Strategy' },
       later(['set-strategy', 'set-persona', 'keep-status-quo']),
-    )).toBe(
-      buildCompletionToolsNudge(['set-strategy', 'keep-status-quo'])
-    );
+    )).toContain(formatToolChoiceList(['set-strategy', 'keep-status-quo']));
     expect(strategist.continuationNudge(
       { mode: 'Flavor' },
       later(['set-flavors', 'set-persona', 'keep-status-quo']),
-    )).toBe(
-      buildCompletionToolsNudge(['set-flavors', 'keep-status-quo'])
-    );
+    )).toContain(formatToolChoiceList(['set-flavors', 'keep-status-quo']));
     expect(strategist.continuationNudge(
       { mode: 'Strategy' },
       later(['set-persona', 'keep-status-quo']),
-    )).toBe(
-      buildCompletionToolsNudge(['keep-status-quo'])
-    );
+    )).toContain(formatToolChoiceList(['keep-status-quo']));
   });
 
   it('derives the Oracle nudge from the completion tools active in the replay', () => {
     const oracle = agentRegistry.get('oracle') as any;
-    expect(oracle.continuationNudge({}, later(['set-strategy', 'get-briefing', 'keep-status-quo']))).toBe(
-      buildCompletionToolsNudge(['set-strategy', 'keep-status-quo'])
-    );
+    expect(oracle.continuationNudge({}, later(['set-strategy', 'get-briefing', 'keep-status-quo']))).toContain(formatToolChoiceList(['set-strategy', 'keep-status-quo']));
     expect(oracle.continuationNudge({}, later(['get-briefing']))).toBeUndefined();
   });
 
@@ -75,24 +61,20 @@ describe('continuationNudge', () => {
     expect(diplomat.continuationNudge(
       {},
       later(['get-briefing', 'send-message', 'call-negotiator', 'close-conversation']),
-    )).toBe(
-      buildCompletionToolsNudge(['send-message', 'call-negotiator', 'close-conversation'])
-    );
+    )).toContain(formatToolChoiceList(['send-message', 'call-negotiator', 'close-conversation']));
   });
 
   it('nudges a live envoy only toward the completion tools resolved for this step', () => {
     const diplomat = agentRegistry.get('diplomat') as any;
     const nudge = diplomat.continuationNudge({}, later(['send-message']));
-    expect(nudge).toBe(buildCompletionToolsNudge(['send-message']));
+    expect(nudge).toContain(formatToolChoiceList(['send-message']));
     expect(nudge).not.toContain('call-negotiator');
     expect(nudge).not.toContain('close-conversation');
 
     expect(diplomat.continuationNudge(
       {},
       later(['call-negotiator', 'send-message']),
-    )).toBe(
-      buildCompletionToolsNudge(['send-message', 'call-negotiator'])
-    );
+    )).toContain(formatToolChoiceList(['send-message', 'call-negotiator']));
   });
 
   it('omits the nudge when the resolved step exposes no completion tool', () => {
@@ -103,37 +85,40 @@ describe('continuationNudge', () => {
   describe('closing reminder', () => {
     const diplomat = () => agentRegistry.get('diplomat') as any;
     const gated = ['call-negotiator', 'send-message'];
-    const nudge = () => buildCompletionToolsNudge(['send-message', 'call-negotiator'])!;
+    const policy = formatToolChoiceList(gated)!;
+    const finishing = formatToolChoiceList(['send-message', 'call-negotiator'])!;
+    /** The diplomat's reminder for a step with the given shape. */
+    const remind = (step: { executable?: string[]; narrowed?: boolean; step?: number; required?: boolean }) =>
+      diplomat().continuationNudge({}, { executable: gated, narrowed: false, step: 0, required: false, ...step });
 
     it('adds nothing on an unnarrowed auto first step', () => {
-      expect(diplomat().continuationNudge({}, { executable: gated, narrowed: false, step: 0, required: false }))
-        .toBeUndefined();
+      expect(remind({})).toBeUndefined();
     });
 
-    it('states only the requirement on an unnarrowed required first step', () => {
-      expect(diplomat().continuationNudge({}, { executable: gated, narrowed: false, step: 0, required: true }))
-        .toBe(buildToolRequirementReminder());
+    it('names no tool when only the requirement applies', () => {
+      const reminder = remind({ required: true });
+      expect(reminder).toBeDefined();
+      for (const name of gated) expect(reminder).not.toContain(name);
     });
 
-    it('states only the tool policy on a narrowed auto first step', () => {
-      expect(diplomat().continuationNudge({}, { executable: gated, narrowed: true, step: 0, required: false }))
-        .toBe(buildToolPolicyReminder(gated));
+    it('names the allowed tools on a narrowed step', () => {
+      expect(remind({ narrowed: true })).toContain(policy);
     });
 
     it('orders the requirement, the policy, and the finalize nudge in one reminder', () => {
-      const reminder: string = diplomat().continuationNudge({}, { executable: gated, narrowed: true, step: 1, required: true });
-      const requirementAt = reminder.indexOf(buildToolRequirementReminder());
-      const policyAt = reminder.indexOf(buildToolPolicyReminder(gated));
-      expect(requirementAt).toBe(0);
-      expect(policyAt).toBeGreaterThan(requirementAt);
-      expect(reminder.indexOf(nudge())).toBeGreaterThan(policyAt);
+      const reminder: string = remind({ narrowed: true, step: 1, required: true });
+      const requirement: string = remind({ required: true });
+      expect(reminder.startsWith(requirement)).toBe(true);
+      const policyAt = reminder.indexOf(policy);
+      expect(policyAt).toBeGreaterThan(requirement.length - 1);
+      expect(reminder.indexOf(finishing)).toBeGreaterThan(policyAt);
     });
 
-    it('states that no tool may run, without the requirement, when the step allows none', () => {
-      // The loop drops a step with nothing to run to auto, so the requirement never meets this policy.
-      const reminder = diplomat().continuationNudge({}, { executable: [], narrowed: true, step: 0, required: false });
-      expect(reminder).toBe(buildToolPolicyReminder([]));
-      expect(reminder).not.toContain('send-message');
+    it('names no tool when the narrowed step allows none', () => {
+      const reminder = remind({ executable: [], narrowed: true });
+      expect(reminder).toBeDefined();
+      expect(reminder).not.toBe(remind({ narrowed: true }));
+      for (const name of gated) expect(reminder).not.toContain(name);
     });
   });
 });

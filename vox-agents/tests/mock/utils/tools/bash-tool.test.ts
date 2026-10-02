@@ -3,12 +3,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VoxContext } from '../../../../src/infra/vox-context.js';
 import type { AgentParameters } from '../../../../src/infra/vox-agent.js';
 import { config } from '../../../../src/utils/config.js';
-import { bashStepsUsed, bashToolName } from '../../../../src/utils/tools/bash-tool.js';
-import { PlayerWorkspace, workspaceNodeSupported, workspaceRoot } from '../../../../src/utils/workspace/player-workspace.js';
+import { bashToolName } from '../../../../src/utils/tools/bash-tool.js';
+import { workspaceNodeSupported, workspaceRoot } from '../../../../src/utils/workspace/player-workspace.js';
 
 const files = { game: 'write' as const, shared: {}, quota: 20 };
 
@@ -56,27 +56,6 @@ describe('bash tool', () => {
       tool.execute({ Command: 'echo hi' }, { toolCallId: 'c1', messages: [] }),
     );
     expect(result).toMatchObject({ stdout: '', exitCode: 1 });
-  });
-
-  it('should refuse to run once the execution has no bash steps left', async () => {
-    const seat = new VoxContext<AgentParameters>({}, 'bash-closed');
-    seat.files = files;
-    seat.registerAgentTools();
-    const tool = seat.tools[bashToolName] as any;
-    const exec = vi.spyOn(PlayerWorkspace.prototype, 'exec');
-
-    const result = await seat.withRun({ parameters: { playerID: 2, gameID: 'g7', turn: 1 } }, () => {
-      seat.bashOpen = false;
-      return tool.execute({ Command: 'echo hi' }, { toolCallId: 'c1', messages: [] });
-    });
-    expect(result).toMatchObject({ stdout: '', exitCode: 1 });
-    expect(exec).not.toHaveBeenCalled();
-    exec.mockRestore();
-  });
-
-  it('should count each step that called bash once', () => {
-    const step = (...names: string[]) => ({ toolCalls: names.map((toolName) => ({ toolName })) });
-    expect(bashStepsUsed([step(), step('bash', 'bash', 'bash'), step('other'), step('other', 'bash')])).toBe(2);
   });
 
   it.skipIf(!workspaceNodeSupported())('should run commands in the workspace of the run parameters', async () => {

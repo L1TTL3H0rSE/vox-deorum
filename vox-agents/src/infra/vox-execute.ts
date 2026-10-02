@@ -28,7 +28,6 @@ import { isHostCapabilityProvider } from "../utils/models/providers/host-tools.j
 import { stripMarkdownConfig, stripToolArtifacts } from "../utils/models/text-cleaning.js";
 import { appendReminder } from "../utils/prompts/reminders.js";
 import { buildRemovedToolRejections } from "../utils/tools/tool-availability.js";
-import { bashStepsUsed } from "../utils/tools/bash-tool.js";
 import { isContextLengthError } from "../utils/retry.js";
 import { agentRegistry } from "./agent-registry.js";
 import type { ExecuteTokenOutput, ExecuteOptions } from "./vox-run.js";
@@ -306,9 +305,6 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       const narrowed = rejections !== undefined;
       // Derived from the executable list, so a step that may run nothing is never forced to call.
       const stepToolChoice = executableTools && executableTools.length > 0 ? agent.toolChoice : "auto";
-      // The files quota limits the model steps that call bash in this execution. Fixed for the step,
-      // so every bash call in one response runs even if they overshoot the quota.
-      if (host.files) host.bashOpen = bashStepsUsed(allSteps) < host.files.quota;
       const stepOutputSchema = stepConfig.outputSchema;
 
       // Append the closing reminder (the requirement when the choice is required, tool policy when
@@ -323,6 +319,8 @@ async function executeAgentStep<TParameters extends AgentParameters>(
           narrowed,
           step: allSteps.length,
           required: stepToolChoice === 'required',
+          // With files on, workspace work and the final decision share one step budget.
+          stepsLeft: host.files ? agent.stepLimit(host) - allSteps.length : undefined,
         }),
       );
 

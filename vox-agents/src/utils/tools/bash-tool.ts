@@ -15,16 +15,6 @@ import { bashToolName } from './tool-names.js';
 
 export { bashToolName } from './tool-names.js';
 
-/**
- * Count the model steps that called bash, including invalid calls. A step with several bash
- * calls counts once, because the quota limits model steps rather than commands.
- *
- * @param steps - The steps of one agent execution
- */
-export function bashStepsUsed(steps: Array<{ toolCalls: Array<{ toolName: string }> }>): number {
-  return steps.filter((step) => step.toolCalls.some((call) => call.toolName === bashToolName)).length;
-}
-
 /** One line per mount, naming its virtual path and access, for the tool description. */
 function describeMounts(files: ResolvedFilesConfig): string[] {
   const lines: string[] = [];
@@ -44,8 +34,7 @@ function failure(message: string): WorkspaceExecResult {
 /**
  * Create the bash tool for a context. The description is fixed by the context's files setting,
  * so it stays the same for every call. Each call runs in the workspace of the player and game in
- * the active parameters and stops with the active run. Once the execution has used its quota of
- * bash steps, calls return a failure without running (see VoxContext.bashOpen).
+ * the active parameters and stops with the active run.
  *
  * @param context - A context whose `files` setting is on
  */
@@ -60,16 +49,13 @@ export function createBashTool<TParameters extends AgentParameters>(context: Vox
       ...describeMounts(files),
       'Files written anywhere else disappear after the call. There is no network, Python, or JavaScript.',
       'Available commands include ls, cat, head, tail, grep, rg, sed, awk, find, sort, jq, sqlite3, and tee. Write files with heredocs.',
-      `You can use bash in up to ${files.quota} rounds per task. All bash calls you make together in one round count once, so make independent calls together in the same round or combine them in one script.`,
+      'Each round of bash calls uses one step of your limited step budget, so make independent calls together in the same round or combine them in one script.',
       'Returns stdout, stderr, and exitCode; long output is truncated.',
     ].join('\n'),
     inputSchema: z.object({
       Command: z.string().describe('The bash script to run. Combine related reads and writes into one script.'),
     }),
     execute: async (input, parameters) => {
-      if (!context.bashOpen) {
-        return failure(`The workspace is closed: this task used all ${files.quota} of its bash rounds. Finish with the other tools.`);
-      }
       let workspace;
       try {
         workspace = context.workspace(parameters.gameID, parameters.playerID);

@@ -87,8 +87,6 @@ export interface ExecutionFrame<TParameters extends AgentParameters> {
   readonly memo: Map<string, Promise<unknown>>;
   /** Per-execution timeout-refresh callback, rebound per model call by the concurrency wrapper. */
   timeoutRefresh: () => void;
-  /** Whether bash may run on this execution's current step; see VoxContext.bashOpen. */
-  bashOpen?: boolean;
 }
 
 // ===========================================================================================

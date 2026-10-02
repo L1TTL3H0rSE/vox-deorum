@@ -31,10 +31,7 @@ import { VoxSpanExporter } from '../../../src/utils/telemetry/vox-exporter.js';
 import type { StrategistParameters } from '../../../src/strategist/strategy-parameters.js';
 import { makeStrategistParameters } from '../../helpers/fake-vox-context.js';
 import type { Model } from '../../../src/types/index.js';
-import {
-  buildClosingReminder,
-  buildToolRequirementReminder,
-} from '../../../src/utils/tools/tool-names.js';
+import { buildClosingReminder } from '../../../src/utils/prompts/closing-reminder.js';
 import { buildRescuePrompt } from '../../../src/utils/models/text-cleaning.js';
 
 const stc = vi.mocked(streamTextWithConcurrency);
@@ -346,7 +343,7 @@ describe('VoxContext continuation nudges', () => {
     expect(first.toolChoice).toBe('required');
     expect(first.messages).toEqual([
       { role: 'system', content: 'system' },
-      { role: 'user', content: buildToolRequirementReminder() },
+      { role: 'user', content: buildClosingReminder(['finish-b'], undefined, { narrowed: false, step: 0, required: true }) },
     ]);
   });
 

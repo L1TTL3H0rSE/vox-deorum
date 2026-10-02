@@ -59,12 +59,11 @@ describe('capabilityInstruction', () => {
     expect(capabilityInstruction({ web: true })!.startsWith(capabilityHeading)).toBe(true);
   });
 
-  it('describes the game folder, its guide, and the quota', () => {
+  it('describes the game folder and its guide', () => {
     const instruction = capabilityInstruction({ files: gameWrite, web: false })!;
     expect(instruction).toContain('/workspace/game');
     expect(instruction).toContain(workspaceGuideFile);
     expect(instruction).toContain(bashToolName);
-    expect(instruction).toContain('17');
   });
 
   it('describes a read-only game folder differently from a writable one', () => {

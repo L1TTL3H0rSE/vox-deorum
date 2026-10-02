@@ -206,7 +206,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
     allSteps: StepResult<Record<string, Tool>>[],
     context: VoxContext<StrategistParameters>
   ): boolean {
-    super.stopCheck(parameters, input, lastStep, allSteps, context);
+    this.recordStep(parameters, input, lastStep);
 
     const completionTools = new Set(this.completionTools);
     // A malformed completion call this step means the model's terminal intent never ran. Keep working
@@ -215,7 +215,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
     // The shared root rule ({@link VoxAgent.retriesMalformedTerminal}) is applied here with the live
     // envoy's completion-tool set; a single malformed call already retries below (getValidCalls excludes
     // it, so hasCompletionTool is false and the final predicate returns false) — this covers the mixed step.
-    if (this.retriesMalformedTerminal(lastStep, allSteps, (name) => completionTools.has(name))) {
+    if (this.retriesMalformedTerminal(lastStep, allSteps, context, (name) => completionTools.has(name))) {
       return false;
     }
     // A completion tool (send-message / negotiator handoff / closure) ends the turn wherever it
@@ -225,7 +225,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
     );
     if (hasCompletionTool) return true;
     // Hard ceiling, checked before the keep-working branch so a runaway loop always stops.
-    if (allSteps.length >= this.maxSteps) return true;
+    if (this.reachedStepLimit(allSteps, context)) return true;
     // A pending supporting (non-completion) tool means the envoy means to keep working — e.g. it
     // spoke a short line then asked for a briefing — so don't stop on that step.
     const hasPendingSupportTool = getValidCalls(lastStep).some(call => !completionTools.has(call.toolName));
@@ -244,7 +244,8 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
    * Restricts a special message run (e.g., a greeting) to the send-message tool only. With the tool
    * force honored on the deployed model an empty tool set would be uncompliable, so the greeting is
    * itself a send-message call streamed back as text — one path for all spoken output. Resolved for
-   * the whole run, so the model is only ever shown the tool it may use.
+   * the whole run, so the model is only ever shown the tool it may use; bash is left out even with
+   * files on.
    */
   public override async getRunTools(
     parameters: StrategistParameters,

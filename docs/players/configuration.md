@@ -43,7 +43,7 @@ The per-seat `files` setting gives one AI civilization's agents a `bash` tool: a
 
 - `game` (`false`, `"read"`, or `"write"`): the seat's folder for the current game, shown as `/workspace/game` in the shell and saved on disk at `workspaces/games/<gameID>-player-<playerID>/` inside the telemetry folder. All agents of one player in one game share it.
 - `shared`: named folders at `/workspace/shared/<name>`, saved under `workspaces/shared/`, that persist across games and seats. A name uses lowercase letters, digits, `-`, or `_`, starting with a letter or digit.
-- `quota`: how many model steps of one agent run may use bash (default 20). Bash itself is cheap, but each step costs a full model call, so several bash calls issued in parallel in one response count as one step. After the quota is used, bash returns an error without running.
+- `quota`: the step budget of one agent run with files on (default 20). Bash steps and the final decision share this budget, and an agent that already allows more steps keeps its own limit. Bash itself is cheap, but each step costs a full model call, so agents are told to batch commands and are reminded each step how many steps they have left to decide.
 
 In the shell, `/tmp` is scratch space shared by one civilization's agents for the whole game, saved under `workspaces/scratch/`, and anything written elsewhere is discarded after each call. Nothing deletes workspace folders automatically; remove them from the telemetry folder when you no longer need them. Agents cannot change a `"read"` folder; a `"write"` folder is saved to disk. Each writable game or shared folder gets an `AGENTS.md` guide, created once and never overwritten, so agents and you can edit it.
 

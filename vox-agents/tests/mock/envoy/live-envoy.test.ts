@@ -18,6 +18,7 @@ import { speakerLabel } from '../../../src/utils/diplomacy/transcript/transcript
 import { buildGameContextMessages } from '../../../src/strategist/strategy-parameters.js';
 import { createFakeVoxContext } from '../../helpers/fake-vox-context.js';
 import { cacheBreakpoint } from '../../../src/utils/models/cache-breakpoint.js';
+import { bashToolName } from '../../../src/utils/tools/tool-names.js';
 
 const spokesperson = agentRegistry.get('spokesperson') as any;
 
@@ -250,6 +251,17 @@ describe('LiveEnvoy.getRunTools', () => {
     expect(await diplomat.getRunTools(params, thread({ messages: [greetingMessage()] }), ctx)).toEqual(['send-message']);
     expect(await diplomat.getRunTools(params, thread({ messages: [textMessage('hello')] }), ctx))
       .toEqual(diplomat.getActiveTools(params));
+  });
+
+  it('leaves bash out of a greeting run but adds it in normal mode when files are on', async () => {
+    const params = liveParams();
+    const fake = createFakeVoxContext();
+    fake.tools[bashToolName] = {} as any;
+    const ctx = fake.asContext();
+
+    expect(await spokesperson.getRunTools(params, thread({ messages: [greetingMessage()] }), ctx)).toEqual(['send-message']);
+    expect(await spokesperson.getRunTools(params, thread({ messages: [textMessage('hello')] }), ctx))
+      .toEqual([...spokesperson.getActiveTools(params), bashToolName]);
   });
 });
 

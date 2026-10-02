@@ -14,10 +14,7 @@ import {
   getValidCalls,
   hasOnlyTerminalCalls,
 } from '../../../src/utils/tools/terminal-tools.js';
-import {
-  formatToolChoiceList,
-  buildCompletionToolsNudge,
-} from '../../../src/utils/tools/tool-names.js';
+import { formatToolChoiceList } from '../../../src/utils/tools/tool-names.js';
 
 const mcpToolMap = new Map<string, any>([
   ['end_turn', { name: 'end_turn', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }],
@@ -100,16 +97,5 @@ describe('formatToolChoiceList', () => {
 
   it('uses an Oxford comma for three or more names', () => {
     expect(formatToolChoiceList(['a', 'b', 'c'])).toBe('`a`, `b`, or `c`');
-  });
-});
-
-describe('buildCompletionToolsNudge', () => {
-  it('returns undefined for an empty list so the injection site skips', () => {
-    expect(buildCompletionToolsNudge([])).toBeUndefined();
-  });
-
-  it('wraps the formatted list in the finalize reminder', () => {
-    const names = ['accept-deal', 'propose-deal', 'reject-deal'];
-    expect(buildCompletionToolsNudge(names)).toContain(formatToolChoiceList(names));
   });
 });

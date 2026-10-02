@@ -94,7 +94,7 @@ Each step has two tool lists:
 
 | List | Comes from | Effect |
 | --- | --- | --- |
-| Declared | `getRunTools()` on the agent, resolved once before the first step. It defaults to `getActiveTools()`, and to every registered tool when that returns nothing. | Sent to the model on every step of the run. Never changes within a run. |
+| Declared | `getRunTools()` on the agent, resolved once before the first step. It defaults to `getActiveTools()` (plus `bash` when the seat has files on), and to every registered tool when that returns nothing. | Sent to the model on every step of the run. Never changes within a run. |
 | Executable | `prepareStep()`'s `activeTools`, else the declared list | What may actually run this step. Names outside the declared list are dropped. |
 
 Keeping the declared list fixed means the tool block, and every prompt text built from it, stays byte-identical across steps. Middleware text also does not depend on the tool choice, so a step that drops from `required` to `auto` changes only the closing reminder at the end. Narrowing is enforced after the model replies instead.
@@ -118,8 +118,8 @@ model reply: [ get-briefing(...), send-message(...) ]
 - `buildRemovedToolRejections` (`utils/tools/tool-availability.ts`) builds one rejection hook per removed tool, passed to the AI SDK as `experimental_refineToolInput`. Only removed tools get a hook, so allowed calls take the normal path. The SDK handles each call separately, so a rejected call never blocks the others in the same reply.
 - Oracle's batch mode never runs the SDK. `convertToStepResult` (`oracle/batch/format-converter.ts`) applies the same hooks while converting a batch response, so a rejected call comes back invalid with the same error result.
 - The tool choice (`required` or `auto`) follows the executable list, so a step that may run nothing is never forced to call a tool. The closing reminder says when a call is required.
-- Tools are only ever removed mid-run, never added. A restriction that is known before the first step belongs in `getRunTools()`, so the model is only shown what it may use. Current cases: a live envoy answering a special message such as a greeting declares only `send-message` (`envoy/live-envoy.ts`), and a telepathist in special mode declares no tools (`telepathist/telepathist.ts`).
-- `prepareStep()` removes tools only after an earlier step ran, for example when a quota runs out. No agent does this today. Telemetry and Oracle depend on this assumption: the first step always runs the full declared list (see [Telemetry and replay](#telemetry-and-replay)).
+- Tools are only ever removed mid-run, never added. A restriction that is known before the first step belongs in `getRunTools()`, so the model is only shown what it may use. Current cases: a live envoy answering a special message such as a greeting declares only `send-message` (`envoy/live-envoy.ts`), and a telepathist in special mode declares no tools (`telepathist/telepathist.ts`). Neither gets `bash`, even with files on.
+- `prepareStep()` removes tools only after an earlier step ran. No agent does this today. Telemetry and Oracle depend on this assumption: the first step always runs the full declared list (see [Telemetry and replay](#telemetry-and-replay)).
 
 ## Reminders
 
@@ -128,15 +128,16 @@ Two reminders are added during a run. Both go through `appendReminder` (`utils/p
 | Reminder | Added by | When | Built in |
 | --- | --- | --- | --- |
 | Empty-reply rescue | `VoxAgent.prepareStep` (`infra/vox-agent.ts`) | The last step made no tool call when one was required, or replied with nothing at all | `buildRescuePrompt` (`utils/models/text-cleaning.ts`) |
-| Closing reminder | `executeAgentStep` (`infra/vox-execute.ts`), from `VoxAgent.continuationNudge` | Every step where it has content | `buildClosingReminder` (`utils/tools/tool-names.ts`) |
+| Closing reminder | `executeAgentStep` (`infra/vox-execute.ts`), from `VoxAgent.continuationNudge` | Every step where it has content | `buildClosingReminder` (`utils/prompts/closing-reminder.ts`) |
 
-The closing reminder has up to three sentences, in this order:
+The closing reminder is one template in `buildClosingReminder`, one line per sentence. Lines that do not apply are dropped and the rest are joined with spaces, in this order:
 
-| Sentence | Included when | Built in |
-| --- | --- | --- |
-| Requirement: "you must issue tool calls" | The step's tool choice is `required` | `buildToolRequirementReminder` |
-| Tool policy: "you may only call X or Y" | Some declared tools were removed for this step | `buildToolPolicyReminder` |
-| Finalize nudge: "make sure to call ... to finalize" | Step 2 onward, naming the agent's `completionTools` that are executable this step | `buildCompletionToolsNudge` |
+| Sentence | Included when |
+| --- | --- |
+| Requirement: "you must issue tool calls" | The step's tool choice is `required` |
+| Tool policy: "you may only call X or Y", or "no tools are available" | Some declared tools were removed for this step |
+| Steps left: "make your final decision within N steps", or "this is your last step" | Every step when the seat has `files` on |
+| Finalize nudge: "make sure to call ... to finalize" | Step 2 onward, naming the agent's `completionTools` that are executable this step |
 
 The requirement lives here rather than in provider middleware, so every provider gets it and the early prompt text never depends on the tool choice. With nothing to say (for example, the first step of an `auto` agent), no message is added. An agent can override `continuationNudge` to change or drop the reminder.
 
@@ -229,12 +230,9 @@ Claude Code flattens the whole prompt into one CLI user message per step, so it 
 | Limiting tools for a whole run | That agent's `getRunTools()` | Decided from the run's input before the first step. The model sees only these tools. |
 | Removing tools mid-run | That agent's `prepareStep()`, setting `activeTools` | Only after an earlier step ran, and only removing. The removed tools stay declared, and the policy sentence is added automatically. |
 | Which calls end the turn | The agent's `completionTools` | Read by `stopCheck`, the finalize nudge, required-tool-choice text, and capability text. |
-| Finalize nudge wording | `buildCompletionToolsNudge` in `utils/tools/tool-names.ts` | |
-| Narrowed-step policy wording | `buildToolPolicyReminder` in `utils/tools/tool-names.ts` | |
-| How the closing reminder combines sentences | `buildClosingReminder` in `utils/tools/tool-names.ts`; per-agent override of `continuationNudge` in `infra/vox-agent.ts` | |
+| Closing reminder wording and order (requirement, tool policy, steps left, finalize nudge) | The template in `buildClosingReminder`, `utils/prompts/closing-reminder.ts`; per-agent override of `continuationNudge` in `infra/vox-agent.ts` | The requirement is on every `required` step, for every provider. |
 | Error text for a call to a removed tool | `buildRemovedToolRejections` in `utils/tools/tool-availability.ts` | The model sees it as that call's tool result. |
 | Empty-reply rescue wording | `buildRescuePrompt` in `utils/models/text-cleaning.ts` | Triggered from `VoxAgent.prepareStep`. |
-| Tool requirement wording | `buildToolRequirementReminder` in `utils/tools/tool-names.ts` | Part of the closing reminder on every `required` step, for every provider. |
 | Completion-tool sentence (Anthropic, Codex) | `completionToolsInstruction` in `utils/models/providers/required-tool-choice.ts` | Must not depend on the tool choice. |
 | Extra Capabilities section | `capabilityInstruction` in `utils/models/capability-prompt.ts` | |
 | Prompt-mode schema block | `createToolPrompts` in `utils/models/tool-rescue/prompt.ts` | Keep it in step with `buildToolCallArraySchema` and `formatToolCallText`; the recovery parser depends on the same shape. |

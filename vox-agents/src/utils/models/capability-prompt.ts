@@ -50,8 +50,8 @@ function workspaceSection(files: ResolvedFilesConfig, terminalNoun: TerminalNoun
 You have a file workspace through the \`${bashToolName}\` ${toolNoun}.
 ${folderBullets(files).join('\n')}
 - Keep notes organized. Current game information from your ${terminalNoun} should take priority over stale notes.
-- You can use \`${bashToolName}\` in up to ${files.quota} rounds per task.
-  - Multiple \`${bashToolName}\` calls in parallel count as one round.
+- Each round of \`${bashToolName}\` calls uses one step of your limited step budget.
+  - Make independent \`${bashToolName}\` calls in parallel, or combine them in one script.
   - Write files with heredocs.`;
 }
 
