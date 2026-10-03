@@ -16,6 +16,7 @@ import { EventEmitter } from 'node:events';
 
 vi.mock('../../../src/utils/game/civ5-ini.js', () => ({
   readCivConfigSeedsContent: vi.fn(),
+  updateCivConfigLegacyMapScriptContent: vi.fn((content: string) => content),
   updateCivConfigSeedsContent: vi.fn(),
   updateCivUserSettingsSkipAnimationsContent: vi.fn(),
 }));

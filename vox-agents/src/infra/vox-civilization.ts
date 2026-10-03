@@ -15,6 +15,7 @@ import { createLogger } from '../utils/logger.js';
 import type { RandomSeedsConfig } from '../types/config.js';
 import {
   readCivConfigSeedsContent,
+  updateCivConfigLegacyMapScriptContent,
   updateCivConfigSeedsContent,
   updateCivUserSettingsSkipAnimationsContent
 } from '../utils/game/civ5-ini.js';
@@ -331,7 +332,9 @@ export class VoxCivilization {
    *
    * Civ reads `SyncRandSeed` and `MapRandSeed` during pregame initialization.
    * If the config omits one or both sides, write `0` for those sides so stale
-   * fixed seeds in config.ini do not leak into an unseeded run.
+   * fixed seeds in config.ini do not leak into an unseeded run. The same write
+   * repairs a LastMapScript that still names the legacy "(1b) Vox Deorum"
+   * folder, since an automated start reuses that map script.
    *
    * A player who never started Civ V has no config.ini. An unseeded run then
    * leaves it alone; a seeded run creates it with just the seed settings.
@@ -359,10 +362,10 @@ export class VoxCivilization {
       };
     }
 
-    const updated = updateCivConfigSeedsContent(content, {
+    const updated = updateCivConfigLegacyMapScriptContent(updateCivConfigSeedsContent(content, {
       sync: seeds?.sync ?? 0,
       map: seeds?.map ?? 0
-    });
+    }));
     await writeFile(configPath, updated, 'utf-8');
     logger.info(`Set Civ V random seeds in config.ini (sync=${seeds?.sync ?? 0}, map=${seeds?.map ?? 0})`);
   }
