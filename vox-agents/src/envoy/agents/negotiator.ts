@@ -35,6 +35,8 @@ import { inspectDeal, readActiveProposal, type InspectDealResult } from "../../u
 import { PROMISE_METADATA } from "../../../../mcp-server/dist/utils/deal-schema.js";
 import { activeProposalDeal } from "../../utils/diplomacy/deal/deal-reduce.js";
 import { resolveNegotiator } from "./resolve-negotiator.js";
+import { getTeammateCounterpart } from "../context/diplomacy-context.js";
+import { negotiatorTeammateExpectation } from "../context/envoy-prompts.js";
 import {
   NEGOTIATOR_TERMINAL_TOOLS,
   createNegotiatorTerminalTools,
@@ -135,17 +137,21 @@ export class Negotiator extends VoxAgent<StrategistParameters, NegotiatorInput, 
 
   public async getSystem(
     parameters: StrategistParameters,
-    _input: NegotiatorInput,
+    input: NegotiatorInput,
     _context: VoxContext<StrategistParameters>
   ): Promise<string> {
     const leader = parameters.metadata?.YouAre?.Leader ?? "your leader";
     const civName = parameters.metadata?.YouAre?.Name ?? "your civilization";
+    const teammate = getTeammateCounterpart(parameters, input.thread);
+    const stance = teammate
+      ? negotiatorTeammateExpectation(civName, teammate.civName)
+      : `- Reason from ${civName}'s strategy, persona, and national interest, not the counterpart's convenience. Drive a hard but realistic bargain.`;
 
     return `
 You are the deal negotiator for ${civName}, serving ${leader}. You negotiate and decide ${civName}'s diplomatic deals and terms.
 
 # Expectations
-- Reason from ${civName}'s strategy, persona, and national interest, not the counterpart's convenience. Drive a hard but realistic bargain.
+${stance}
 - You work behind the diplomat, who speaks to the other civilization and relays you a briefing of the conversational context.
 - There is no user (to respond to), so you ALWAYS and ONLY properly call tools to convey your decisions.
 - Your context includes a fresh inspection and evaluation of the deal on the table (if exists) and all tradable items. 

@@ -72,6 +72,16 @@ export function getPlayerTeamID(players: GameState["players"], playerID: number)
 }
 
 /**
+ * Whether two distinct players are permanent teammates (same team since game start)
+ * according to a cached players report. Unknown players are never teammates.
+ */
+export function areTeammates(players: GameState["players"], playerA: number, playerB: number): boolean {
+  if (playerA === playerB) return false;
+  const teamA = getPlayerTeamID(players, playerA);
+  return teamA !== undefined && teamA === getPlayerTeamID(players, playerB);
+}
+
+/**
  * Flatten supported event report shapes into a single event list.
  *
  * Current-turn cached events use `{ events: [...] }`, while merged decision

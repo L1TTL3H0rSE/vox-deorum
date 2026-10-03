@@ -26,6 +26,7 @@ import {
   type NegotiatorInput,
 } from '../../../../src/envoy/context/negotiator-utils.js';
 import { sessionRegistry } from '../../../../src/infra/session-registry.js';
+import { negotiatorTeammateExpectation } from '../../../../src/envoy/context/envoy-prompts.js';
 import { PROMISE_METADATA, AGREEMENT_METADATA } from '../../../../../mcp-server/dist/utils/deal-schema.js';
 
 /** The canonical label for an agreement item type (from the single-source AGREEMENT_METADATA). */
@@ -852,5 +853,31 @@ describe('getOutput', () => {
   it('returns undefined when no terminal tool recorded a move', async () => {
     const out = await negotiator.getOutput({} as any, negotiatorInput(), '');
     expect(out).toBeUndefined();
+  });
+});
+
+describe('getSystem teammate stance', () => {
+  /** Strategist parameters with seats 1 and 3 on the given teams (seat 1 hides its own TeamID). */
+  function teamParams(seat3Team: number) {
+    return {
+      turn: 5, playerID: 3, metadata: { YouAre: { Name: 'Germany', Leader: 'Bismarck' } },
+      gameStates: { 5: { turn: 5, reports: {}, players: {
+        '1': { Civilization: 'Rome', Leader: 'Caesar' },
+        '3': { Civilization: 'Germany', Leader: 'Bismarck', ...(seat3Team === 3 ? {} : { TeamID: seat3Team }) },
+      } } },
+    } as any;
+  }
+  const teammateThread = () => thread({ player1Identity: { name: 'Rome', leader: 'Caesar' } });
+
+  it('should judge deals by team benefit when the counterpart is a teammate', async () => {
+    const negotiator = new Negotiator();
+    const system = await negotiator.getSystem(teamParams(1), negotiatorInput({ thread: teammateThread() }), {} as any);
+    expect(system).toContain(negotiatorTeammateExpectation('Germany', 'Rome'));
+  });
+
+  it('should keep the hard-bargain stance for other teams', async () => {
+    const negotiator = new Negotiator();
+    const system = await negotiator.getSystem(teamParams(3), negotiatorInput({ thread: teammateThread() }), {} as any);
+    expect(system).not.toContain(negotiatorTeammateExpectation('Germany', 'Rome'));
   });
 });

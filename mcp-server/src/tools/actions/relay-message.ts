@@ -29,7 +29,9 @@ const RelayMessageInputSchema = z.object({
   Categories: z.array(z.enum(['Diplomacy', 'Military', 'Economy', 'Others']))
     .describe('All report categories with estimated relevance probability at least 0.5; multiple categories or an empty array are allowed'),
   Memo: z.string().min(1).max(500)
-    .describe("The analyst's memo: assessment, reaction, and contextual notes")
+    .describe("The memo: assessment, reaction, and contextual notes"),
+  MemoBy: z.enum(['analyst', 'diplomat']).optional()
+    .describe('Who wrote the memo (defaults to analyst)')
 });
 
 /**
@@ -66,7 +68,7 @@ class MessageRelayTool extends DynamicEventTool {
       Confidence: `${args.Confidence}/9`,
       Importance: args.Importance,
       Categories: args.Categories,
-      Memo: `Our analyst: ${args.Memo}`
+      Memo: `Our ${args.MemoBy ?? 'analyst'}: ${args.Memo}`
     };
   }
 }

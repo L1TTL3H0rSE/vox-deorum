@@ -14,7 +14,8 @@
  */
 
 import type { VoxContext } from "../../infra/vox-context.js";
-import type { StrategistParameters } from "../../strategist/strategy-parameters.js";
+import { getRecentGameState, type StrategistParameters } from "../../strategist/strategy-parameters.js";
+import { areTeammates } from "../../strategist/pacing/utils.js";
 import type { EnvoyThread } from "../../types/index.js";
 import { identityOf } from "../../utils/diplomacy/transcript/transcript-utils.js";
 import { jsonToMarkdown } from "../../utils/tools/json-to-markdown.js";
@@ -139,6 +140,20 @@ function concludedDealsSection(
     })}`;
   });
   return `## Recently Concluded Deals With ${counterpartCiv} (Last ${window} Turns)\n${rows.join("\n")}`;
+}
+
+/**
+ * The counterpart's civ name when it is a permanent teammate of the voiced seat (same team since game
+ * start, read from the cached players report), or undefined otherwise. The result stays stable while
+ * both seats remain in the players report; a defeated teammate drops out of it.
+ */
+export function getTeammateCounterpart(
+  parameters: StrategistParameters,
+  thread: EnvoyThread
+): { civName: string } | undefined {
+  const { agentID, counterpartID } = endpoints(thread);
+  if (!areTeammates(getRecentGameState(parameters)?.players, agentID, counterpartID)) return undefined;
+  return { civName: identityOf(thread, counterpartID)?.name ?? `Player ${counterpartID}` };
 }
 
 /** The diplomacy background plus the viewer-perspective players report both agents reuse. */

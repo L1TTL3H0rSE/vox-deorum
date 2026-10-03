@@ -32,6 +32,8 @@ export interface AnalystInput extends Omit<AnalystReport, "FromPlayer" | "AboutP
   FromPlayerID: number;
   /** Players the report discusses, excluding the receiving civilization. */
   AboutPlayerIDs: number[];
+  /** Whether the source is a permanent teammate; such reports are relayed without scoring. */
+  FromTeammate?: boolean;
 }
 
 /**

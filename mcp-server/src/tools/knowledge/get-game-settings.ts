@@ -17,7 +17,8 @@ import { getPlayerInformations } from "../../knowledge/getters/player-informatio
  */
 const MetadataSchema = z.object({
   YouAre: CivilizationSummarySchema.extend({
-    PlayerID: z.number()
+    PlayerID: z.number(),
+    PermanentTeammates: z.array(z.string()).optional()
   }).optional(),
   GameSpeed: z.string(),
   MapType: z.string(),
@@ -108,6 +109,11 @@ class GetGameSettingsTool extends LuaFunctionTool<GameMetadata> {
           metadata.YouAre = JSON.parse(JSON.stringify(civilization));
           metadata.YouAre!.PlayerID = args.PlayerID;
           delete metadata.YouAre!.Type;
+          // Players sharing our team (fixed at game start)
+          const teammates = summaries
+            .filter(other => other.Key !== summary.Key && other.TeamID === summary.TeamID && other.IsMajor === 1)
+            .map(other => `Player ${other.Key}: ${other.Civilization} (${other.Leader})`);
+          if (teammates.length > 0) metadata.YouAre!.PermanentTeammates = teammates;
         }
       }
     }

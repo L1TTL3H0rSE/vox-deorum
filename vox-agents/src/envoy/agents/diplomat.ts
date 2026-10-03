@@ -12,10 +12,10 @@ import { LiveEnvoy, type LiveEnvoyContext } from "../live-envoy.js";
 import { VoxContext } from "../../infra/vox-context.js";
 import { StrategistParameters, getRecentGameState } from "../../strategist/strategy-parameters.js";
 import { EnvoyThread } from "../../types/index.js";
-import { worldContext, noDecisionPower, communicationStyle, audienceSection } from "../context/envoy-prompts.js";
+import { worldContext, noDecisionPower, communicationStyle, audienceSection, diplomatTeammateReporting } from "../context/envoy-prompts.js";
 import { createCloseConversationTool } from "../tools/close-conversation-tool.js";
 import { buildDealContextMessage, renderDealRowInline, type DiplomatDealContext } from "../context/diplomat-utils.js";
-import { buildDiplomacyBackgroundMessage } from "../context/diplomacy-context.js";
+import { buildDiplomacyBackgroundMessage, getTeammateCounterpart } from "../context/diplomacy-context.js";
 import { readActiveProposal } from "../../utils/diplomacy/deal/deal.js";
 import { terminalActionTools, type DealRowRenderer } from "../../utils/diplomacy/transcript/transcript-utils.js";
 import { createTriage, TriageShortcut } from "../../infra/triage.js";
@@ -223,7 +223,7 @@ export class Diplomat extends LiveEnvoy {
    * Gets the system prompt defining the diplomat persona
    */
   public async getSystem(
-    _parameters: StrategistParameters,
+    parameters: StrategistParameters,
     input: EnvoyThread,
     _context: VoxContext<StrategistParameters>
   ): Promise<string> {
@@ -265,7 +265,9 @@ You represent your government's interests and gather intelligence through diplom
     }
 
     sections.push(communicationStyle);
-    sections.push(audienceSection(this.formatUserDescription(input)));
+    const teammate = getTeammateCounterpart(parameters, input);
+    sections.push(audienceSection(this.formatUserDescription(input), teammate));
+    if (teammate && !this.isSpecialMode(input)) sections.push(diplomatTeammateReporting);
 
     return sections.join('\n\n').trim();
   }

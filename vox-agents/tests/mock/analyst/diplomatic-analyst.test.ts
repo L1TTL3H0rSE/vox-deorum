@@ -10,6 +10,7 @@ const report = {
 /** The report after handoff resolution: Germany (1) about Greece (2). */
 const input = {
   Content: report.Content, Context: report.Context, Memo: report.Memo, FromPlayerID: 1, AboutPlayerIDs: [2],
+  FromTeammate: false,
 };
 
 /** Build evaluation answers with independent category probabilities. */
@@ -186,5 +187,28 @@ describe('DiplomaticAnalyst evaluation', () => {
     evaluate.mockRejectedValueOnce(new Error('evaluation failed'));
     await expect(analyst.executeEvaluation(parameters, input, context, { messages: [] }, {})).rejects.toThrow();
     expect(callTool).not.toHaveBeenCalled();
+  });
+});
+
+describe('DiplomaticAnalyst teammate reports', () => {
+  it('should flag a report from a permanent teammate at handoff', () => {
+    const { context, parameters } = setup();
+    (parameters.gameStates[5].players!['1'] as any).TeamID = 0;
+    expect(analyst.resolveHandoffInput(report, context).FromTeammate).toBe(true);
+  });
+
+  it('should relay a teammate report directly without history or evaluation', async () => {
+    const { context, parameters, callTool, evaluate } = setup();
+    const teammateInput = { ...input, FromTeammate: true };
+    const messages = await analyst.getInitialMessages(parameters, teammateInput, context);
+    await analyst.executeEvaluation(parameters, teammateInput, context, { system: 'system', messages }, {});
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(callTool).toHaveBeenCalledExactlyOnceWith('relay-message', {
+      PlayerID: parameters.playerID, FromPlayerID: 1, AboutPlayerIDs: [2],
+      Message: 'Diplomatic', Content: input.Content, Memo: input.Memo,
+      Confidence: 9, Importance: 7, Categories: ['Diplomacy', 'Military', 'Economy', 'Others'],
+      MemoBy: 'diplomat',
+    }, parameters);
   });
 });

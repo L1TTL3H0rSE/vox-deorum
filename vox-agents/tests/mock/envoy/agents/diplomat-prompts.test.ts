@@ -14,6 +14,7 @@ import {
   noDecisionPower,
   communicationStyle,
   audienceSection,
+  diplomatTeammateReporting,
 } from '../../../../src/envoy/context/envoy-prompts.js';
 
 const diplomat = agentRegistry.get('diplomat') as any;
@@ -164,5 +165,45 @@ describe('Spokesperson.getSystem', () => {
     // The audience section is still assembled by reference in special mode.
     expect(system).toContain(audienceSection('the leader of Rome'));
     expect(system).toContain(communicationStyle);
+  });
+});
+
+describe('teammate counterpart', () => {
+  /** Params whose cached players report puts seats 1 and 3 on the given teams (seat 1 hides its own TeamID). */
+  function teamParams(seat3Team: number) {
+    return {
+      ...params,
+      gameStates: {
+        5: { turn: 5, reports: {}, players: {
+          '1': { Civilization: 'Rome', Leader: 'Caesar' },
+          '3': { Civilization: 'Germany', Leader: 'Bismarck', ...(seat3Team === 3 ? {} : { TeamID: seat3Team }) },
+        } },
+      },
+    };
+  }
+
+  it('switches the Diplomat to the teammate audience and reporting sections', async () => {
+    const system = await diplomat.getSystem(teamParams(1), thread(), undefined);
+    expect(system).toContain(audienceSection('the leader of Rome', { civName: 'Rome' }));
+    expect(system).toContain(diplomatTeammateReporting);
+    expect(system).not.toContain(audienceSection('the leader of Rome'));
+  });
+
+  it('keeps the default audience for players on different teams', async () => {
+    const system = await diplomat.getSystem(teamParams(3), thread(), undefined);
+    expect(system).toContain(audienceSection('the leader of Rome'));
+    expect(system).not.toContain(diplomatTeammateReporting);
+  });
+
+  it('omits the reporting section in special (greeting) mode', async () => {
+    const system = await diplomat.getSystem(teamParams(1), greetingThread(), undefined);
+    expect(system).toContain(audienceSection('the leader of Rome', { civName: 'Rome' }));
+    expect(system).not.toContain(diplomatTeammateReporting);
+  });
+
+  it('switches the Spokesperson to the teammate audience without the reporting section', async () => {
+    const system = await spokesperson.getSystem(teamParams(1), thread(), undefined);
+    expect(system).toContain(audienceSection('the leader of Rome', { civName: 'Rome' }));
+    expect(system).not.toContain(diplomatTeammateReporting);
   });
 });

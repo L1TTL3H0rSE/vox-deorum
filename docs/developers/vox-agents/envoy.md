@@ -36,6 +36,8 @@ Both concrete envoys share prompt building blocks (`src/envoy/context/envoy-prom
 - A communication style that matches the leader's personality while staying strategically vague about sensitive details.
 - Audience-aware framing: warm with allies, guarded or taunting with rivals, professionally courteous with neutrals.
 
+When the counterpart is a permanent teammate (the same team since game start, read from the cached players report), the audience framing changes. The envoy treats the team's interest as its own, shares plans and numbers openly, and coordinates instead of bargaining. The diplomat is also told to always report a teammate's plans, requests, commitments, warnings, and changes in situation. The negotiator likewise judges a teammate's deals by the team's combined benefit rather than driving a hard bargain.
+
 ### Spokesperson
 
 `Spokesperson` (`src/envoy/agents/spokesperson.ts`) is the civilization's public voice. It answers questions about its nation's positions and views, drawing on briefings and diplomatic history (`get-diplomatic-events`). It conveys existing positions rather than creating new ones, and it does not report back to anyone. A conversation with the spokesperson stays between you and it.

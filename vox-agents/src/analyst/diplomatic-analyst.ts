@@ -14,6 +14,7 @@ import type { ExecuteTokenOutput } from "../infra/vox-run.js";
 import { Analyst, AnalystInput, AnalystReport } from "./analyst.js";
 import { VoxContext } from "../infra/vox-context.js";
 import { getGameState, StrategistParameters } from "../strategist/strategy-parameters.js";
+import { areTeammates } from "../strategist/pacing/utils.js";
 
 /** How many past turns of diplomatic history the analyst reads for each involved player. */
 const historyTurns = 30;
@@ -94,8 +95,9 @@ function normalizeName(text: string): string {
  * addressed to it already.
  */
 function resolveReport(report: AnalystReport, parameters: StrategistParameters, callerInput: unknown): AnalystInput {
+  const playersReport = getGameState(parameters, parameters.turn)?.players;
   const players = new Map<number, string[]>();
-  for (const [id, player] of Object.entries(getGameState(parameters, parameters.turn)?.players ?? {})) {
+  for (const [id, player] of Object.entries(playersReport ?? {})) {
     if (typeof player !== "string" && player.IsMajor) {
       players.set(Number(id), [player.Civilization, player.Leader].filter(Boolean).map(normalizeName));
     }
@@ -127,6 +129,7 @@ function resolveReport(report: AnalystReport, parameters: StrategistParameters, 
     Memo: report.Memo,
     FromPlayerID: fromPlayerID,
     AboutPlayerIDs: [...new Set(aboutPlayerIDs)].filter(id => id !== parameters.playerID),
+    FromTeammate: parameters.playerID !== undefined && areTeammates(playersReport, parameters.playerID, fromPlayerID),
   };
 }
 
@@ -154,6 +157,19 @@ export class DiplomaticAnalyst extends Analyst {
     input: AnalystInput,
     context: VoxContext<StrategistParameters>,
   ): Promise<PreparedAgentState["messages"]> {
+    // Teammate reports are relayed as-is, so they need no history or game context.
+    if (input.FromTeammate) {
+      return [{
+        role: "user",
+        content: JSON.stringify({
+          context: input.Context,
+          content: input.Content,
+          memo: input.Memo,
+          FromPlayerID: input.FromPlayerID,
+          AboutPlayerIDs: input.AboutPlayerIDs,
+        }),
+      }];
+    }
     const playerIDs = [...new Set([input.FromPlayerID, ...input.AboutPlayerIDs])];
     const results = await Promise.all(playerIDs.map(playerID => context.callTool("get-diplomatic-events", {
       PlayerID: parameters.playerID,
@@ -192,6 +208,7 @@ export class DiplomaticAnalyst extends Analyst {
     model: Model,
     tokenOutput?: ExecuteTokenOutput,
   ): Promise<string | undefined> {
+    if (input.FromTeammate) return this.relayTeammateReport(parameters, input, context);
     const { answers } = await context.evaluate(model, prepared, { questions: evaluationQuestions, tokenOutput });
     if (answers.relay.probability < 0.5) return undefined;
     context.currentSignal().throwIfAborted();
@@ -208,5 +225,31 @@ export class DiplomaticAnalyst extends Analyst {
     }, parameters);
     if (isFailedToolResult(relay)) throw new Error("Diplomatic analyst relay-message tool failed.");
     return "Report relayed to the leader.";
+  }
+
+  /**
+   * Forward a permanent teammate's report to the leader without scoring it: authoritative,
+   * important enough to trigger a strategist re-decision, and visible to every briefer category.
+   */
+  private async relayTeammateReport(
+    parameters: StrategistParameters,
+    input: AnalystInput,
+    context: VoxContext<StrategistParameters>,
+  ): Promise<string> {
+    context.currentSignal().throwIfAborted();
+    const relay = await context.callTool("relay-message", {
+      PlayerID: parameters.playerID,
+      FromPlayerID: input.FromPlayerID,
+      AboutPlayerIDs: input.AboutPlayerIDs,
+      Message: "Diplomatic",
+      Content: input.Content.slice(0, 4000),
+      Confidence: 9,
+      Importance: 7,
+      Categories: [...reportCategories],
+      Memo: input.Memo.slice(0, 500),
+      MemoBy: "diplomat",
+    }, parameters);
+    if (isFailedToolResult(relay)) throw new Error("Diplomatic analyst relay-message tool failed.");
+    return "Teammate report relayed to the leader.";
   }
 }

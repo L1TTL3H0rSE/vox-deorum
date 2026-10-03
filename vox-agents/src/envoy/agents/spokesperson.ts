@@ -10,6 +10,7 @@ import { VoxContext } from "../../infra/vox-context.js";
 import { StrategistParameters } from "../../strategist/strategy-parameters.js";
 import { EnvoyThread } from "../../types/index.js";
 import { worldContext, noDecisionPower, communicationStyle, audienceSection } from "../context/envoy-prompts.js";
+import { getTeammateCounterpart } from "../context/diplomacy-context.js";
 
 /**
  * Spokesperson agent that represents the civilization diplomatically.
@@ -48,7 +49,7 @@ export class Spokesperson extends LiveEnvoy {
    * Gets the system prompt defining the spokesperson persona
    */
   public async getSystem(
-    _parameters: StrategistParameters,
+    parameters: StrategistParameters,
     input: EnvoyThread,
     _context: VoxContext<StrategistParameters>
   ): Promise<string> {
@@ -77,7 +78,7 @@ You represent your government's interests with diplomatic tact and strategic amb
     }
 
     sections.push(communicationStyle);
-    sections.push(audienceSection(this.formatUserDescription(input)));
+    sections.push(audienceSection(this.formatUserDescription(input), getTeammateCounterpart(parameters, input)));
 
     return sections.join('\n\n').trim();
   }

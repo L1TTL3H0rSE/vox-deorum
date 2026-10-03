@@ -37,6 +37,8 @@ The one concrete analyst today is **`diplomatic-analyst`** (`src/analyst/diploma
 
 When the relay probability is at least 0.5, code calls `relay-message` with the source and subject IDs, up to 4,000 characters of content, and up to 500 characters of memo. Each category is included when its probability is at least 0.5. Scores keep their fractions, and importance of 7 or more still counts as an urgent report for pacing. Specialized briefers pick up reports tagged Diplomacy, Military, or Economy; a report tagged only Others reaches the strategist but no briefer. If the evaluation fails, nothing is relayed.
 
+Reports from a permanent teammate skip steps 2 and 3. The analyst relays them as they are: Diplomatic, confidence 9, importance 7 (so the strategist re-decides promptly), all four categories, with the memo attributed to the diplomat.
+
 The analyst runs on its own model assignment, or on the tier the diplomat picks for the call. A native evaluator and a chat model (through the evaluation adapter) both work.
 
 ## Librarians: researching the rules

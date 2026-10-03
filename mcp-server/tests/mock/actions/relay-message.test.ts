@@ -109,6 +109,12 @@ describe('relay-message', () => {
     expect(payload.Memo).toBe(`Our analyst: ${baseArgs.Memo}`);
   });
 
+  it('attributes the memo to the diplomat when MemoBy is diplomat', async () => {
+    await client.call({ ...baseArgs, MemoBy: 'diplomat' });
+    const { payload } = await readEvent();
+    expect(payload.Memo).toBe(`Our diplomat: ${baseArgs.Memo}`);
+  });
+
   it('preserves an explicit empty subject list and defaults omitted subjects to empty', async () => {
     await client.call({ ...baseArgs, AboutPlayerIDs: [] });
     expect((await readEvent()).payload.AboutPlayerIDs).toEqual([]);
