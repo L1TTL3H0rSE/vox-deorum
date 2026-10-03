@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   readCivConfigSeedsContent,
   readCivLoggingEnabledContent,
+  updateCivConfigLegacyMapScriptContent,
   updateCivConfigSeedsContent,
   updateCivLoggingEnabledContent,
   updateCivUserSettingsSkipAnimationsContent
@@ -74,6 +75,31 @@ describe('Civ config.ini seed updates', () => {
     expect(readCivConfigSeedsContent(updated)).toEqual({ sync: '1', map: '2' });
     expect(updated).toContain('[config]');
     expect(updated).toContain('syncrandseed=1');
+  });
+});
+
+describe('Civ config.ini legacy map script repair', () => {
+  const modsDir = String.raw`D:\Documents\My Games\Sid Meier's Civilization 5\MODS`;
+
+  it('moves a Windows LastMapScript path from the legacy mod folder to the current one', () => {
+    const content = [
+      '[UserSettings]',
+      '; Last Map Type Played',
+      String.raw`LastMapScript = ${modsDir}\(1b) Vox Deorum\Mapscripts/Vox_Deorum.lua`,
+      'LastMapScriptRandom = 0'
+    ].join('\r\n');
+
+    const updated = updateCivConfigLegacyMapScriptContent(content);
+
+    expect(updated).toBe(content.replace('(1b) Vox Deorum', '(5) Vox Deorum'));
+  });
+
+  it('leaves current and unrelated map scripts alone', () => {
+    const current = String.raw`[UserSettings]` + '\n' + String.raw`LastMapScript = ${modsDir}\(5) Vox Deorum\Mapscripts/Vox_Deorum.lua`;
+    const builtIn = '[UserSettings]\nLastMapScript = Assets\Maps\Continents.lua';
+
+    expect(updateCivConfigLegacyMapScriptContent(current)).toBe(current);
+    expect(updateCivConfigLegacyMapScriptContent(builtIn)).toBe(builtIn);
   });
 });
 

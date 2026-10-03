@@ -10,10 +10,8 @@ const QUICK_COMBAT_KEY = 'SinglePlayerQuickCombatEnabled';
 const QUICK_MOVEMENT_KEY = 'SinglePlayerQuickMovementEnabled';
 const DEBUG_SECTION = 'DEBUG';
 const LOGGING_ENABLED_KEY = 'LoggingEnabled';
-const USER_SETTINGS_SECTION = 'UserSettings';
-const LAST_MAP_SCRIPT_KEY = 'LastMapScript';
 // The mod folder was renamed from "(1b) Vox Deorum" to "(5) Vox Deorum".
-const legacyModFolderPattern = /([\\/])\(1b\) Vox Deorum([\\/])/i;
+const legacyMapScriptPattern = /^(\s*LastMapScript\s*=.*?[\\/])\(1b\) Vox Deorum(?=[\\/])/im;
 
 /**
  * Concrete values to write into Civ's config.ini.
@@ -53,16 +51,9 @@ export function updateCivConfigSeedsContent(content: string, seeds: CivConfigSee
  * script, and a path to the removed folder launches with no map script at all.
  */
 export function updateCivConfigLegacyMapScriptContent(content: string): string {
-  const ini = new Ini(content);
-  const line = getLineIgnoreCase(getSectionIgnoreCase(ini, USER_SETTINGS_SECTION), LAST_MAP_SCRIPT_KEY);
-  if (!line || line.value === undefined) return content;
-
-  const value = String(line.value);
-  const fixed = value.replace(legacyModFolderPattern, '$1(5) Vox Deorum$2');
-  if (fixed === value) return content;
-
-  line.value = fixed;
-  return ini.stringify();
+  // Edit the raw line: ini-api treats backslashes as escapes and would strip
+  // the Windows path separators this match depends on.
+  return content.replace(legacyMapScriptPattern, '$1(5) Vox Deorum');
 }
 
 /** Update single-player quick combat and movement settings in UserSettings.ini. */
