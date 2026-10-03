@@ -22,19 +22,19 @@ Use `playerID` in the notification panel's war-weariness tooltip. The current up
 
 **Related files:** `(3a) VP - EUI Compatibility Files/LUA/NotificationPanel.lua`. **Patch:** `0007`.
 
-### 3. Correct remaining turns on incoming trade routes
+### 3. Correct remaining turns on incoming trade routes (submitted)
 
 Make `GetTradeRoutesToYou().TurnsLeft` return completion turn minus current turn, matching outgoing trade routes. Active incoming routes currently expose a negative countdown.
 
 **Related files:** Lua `CvLuaPlayer.cpp`. **Patch:** `0073`.
 
-### 4. Report election influence losses without requiring a spy
+### 4. Report election influence losses without requiring a spy (submitted)
 
 Separate the losing-spy event path from influence losses suffered by a player without a spy. Use the actual spy ID for the former and `-1` for the latter, avoiding the invalid spy lookup and assertion. Preserve the `MOD_EVENTS_ESPIONAGE` guard for both paths; the exported no-spy call currently lacks it. Confirm the intended event coverage before extraction.
 
 **Related files:** core `CvMinorCivAI.cpp`, in `DoElection`. **Patch:** `0045`.
 
-### 5. Keep observer unit flags visible during combat
+### 5. Keep observer unit flags visible during combat (submitted)
 
 Skip combat-animation flag hiding for observers in both `RunCombatSim` and `EndCombatSim`. Reproduce the observer display problem and verify that human-player animations retain their existing behavior.
 
@@ -92,7 +92,7 @@ Extract the `PlayerVictory` hook from `CvGame::setWinner` so scenarios can react
 
 **Related files:** core `CvGame.cpp`; core `CustomMods.h` and `(1) Community Patch/Database Changes/NewCustomModOptions.xml` if standardized through the event-option system. **Patch:** `0037`.
 
-### 14. Name cooperative-war partners in diplomacy tooltips
+### 14. Name cooperative-war partners in diplomacy tooltips (submitted)
 
 Show the partners alongside the countdown for a preparing cooperative war. Keep the argument change and localized text together, and preserve the existing rules governing when the information is visible. Leave unrelated debug-label edits out of this PR.
 
