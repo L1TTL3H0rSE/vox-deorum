@@ -12,7 +12,6 @@ import { VoxContext } from "../infra/vox-context.js";
 import { formatToolResultOutput, stripSpokenEcho } from "../utils/models/text-cleaning.js";
 import { audienceID, boundaryIndex, collectSpokenReply, identityOf, observerName, roleOf, speakerLabel, type DealRowRenderer } from "../utils/diplomacy/transcript/transcript-utils.js";
 import { sendMessageToolName } from "../utils/diplomacy/constants.js";
-import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
 
 /**
  * Prompt-cache breakpoint strategy (Anthropic providers only; a no-op elsewhere).
@@ -36,32 +35,9 @@ import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
  *
  * Caching between game turns is out of scope (game state churns). A breakpoint only marks a
  * cache-WRITE point; lookup matches by content prefix, not by where breakpoints sat last request.
- * The marker itself ({@link cacheBreakpoint}, one-hour entries) lives in `utils/models/cache-breakpoint.ts`.
+ * The marker, `markBreakpointOnLast`, and the `MAX_CACHE_BREAKPOINTS` ceiling live in
+ * `utils/models/cache-breakpoint.ts`.
  */
-
-/**
- * The Anthropic prompt cache accepts at most this many cache-control breakpoints per request; a
- * request carrying more is rejected outright. A live-envoy assemble sets three of them (game
- * context, past block, last ongoing row), leaving one slot of headroom. Named as a ceiling so the
- * getInitialMessages guard can surface a future anchor that would otherwise push a request over the
- * limit as a warning here, rather than as a provider error at request time.
- */
-export const MAX_CACHE_BREAKPOINTS = 4;
-
-/**
- * Attach an Anthropic cache breakpoint to the LAST message of `messages`, in place. The slot is
- * replaced with an annotated copy — the message object itself is never mutated, and any existing
- * `providerOptions` are spread through. No-op on an empty array. See the prompt-cache breakpoint
- * strategy note above.
- */
-export function markBreakpointOnLast(messages: ModelMessage[]): void {
-  const last = messages[messages.length - 1];
-  if (!last) return;
-  messages[messages.length - 1] = {
-    ...last,
-    providerOptions: { ...last.providerOptions, ...cacheBreakpoint },
-  } as ModelMessage;
-}
 
 /**
  * Copy a stored trace {@link ModelMessage} for replay: a fresh row with a fresh parts array whose

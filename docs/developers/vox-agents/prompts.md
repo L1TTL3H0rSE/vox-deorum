@@ -214,7 +214,12 @@ Where agents place their anchors:
 | --- | --- | --- |
 | Strategists | The game-context system message | `strategist/agents/simple-strategist.ts` and its `-briefed` and `-staffed` variants |
 | Briefers | Their game-context message | `briefer/simple-briefer.ts`, `briefer/specialized-briefer.ts` |
-| Live envoys | Game context, settled past conversations, last ongoing chat row (three anchors, at most four allowed per request) | `buildGameContextMessages` in `strategist/strategy-parameters.ts`; `getInitialMessages` in `envoy/live-envoy.ts`; strategy note, `markBreakpointOnLast`, and `MAX_CACHE_BREAKPOINTS` in `envoy/envoy.ts` |
+| Live envoys | Game context, settled past conversations, last ongoing chat row (three anchors, at most four allowed per request) | `buildGameContextMessages` in `strategist/strategy-parameters.ts`; `getInitialMessages` in `envoy/live-envoy.ts`; strategy note in `envoy/envoy.ts` |
+| Any agent whose seat has `files` on | The run's last initial message, unless it already carries an anchor or the request already has four | `executeAgent` in `infra/vox-execute.ts` |
+
+`markBreakpointOnLast`, `countCacheBreakpoints`, and the four-anchor ceiling `MAX_CACHE_BREAKPOINTS` live next to the marker in `utils/models/cache-breakpoint.ts`. Entries last five minutes, refreshed on each read.
+
+With files on, a run often takes many steps, so its initial prompt (instructions, game context, and game state) becomes an anchor. Step 1 writes it to the cache, and later steps within the five-minute window read it back. The steps-left countdown and all step traffic come after it, and [compaction](compaction.md) only rewrites messages after it, so neither breaks the cached prefix. Step 1 pays the cache-write premium even when the run ends in one step.
 
 Claude Code flattens the whole prompt into one CLI user message per step, so it does not reuse anything past the CLI's own system prompt between steps.
 

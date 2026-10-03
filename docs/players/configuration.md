@@ -29,7 +29,7 @@ Vox Deorum works with any of these providers, and you can mix several in one gam
 
 The Setup wizard connects you with the API service, authenticates for you, and lists available models. Keys stay on your machine and go to the provider you chose. You can use your Claude subscription through connecting with Claude Code, or ChatGPT subscription through Codex. For Codex-related questions, see [Troubleshooting](troubleshooting.md#codex-login-doesnt-start-or-finish).
 
-Advanced setups can let a CLI-backed model read or write files or reach the web during its turn. Enabled agents are told which capabilities they have, and file access gives agents for the same civilization a shared temporary workspace for notes. Read access can consult its create-once guide, while Write access can maintain the notes and guide. These files generally survive turns and restarts until temporary storage is cleaned, but they are not archival and do not follow a switch between Codex and Claude Code. See the [developer overview](../developers/vox-agents/overview.md#models-and-configuration) for the full policy.
+A Codex or Claude Code model can reach the web during its turn when its model options include `"hostTools": ["Web"]`, and it is told when it has that access. `Web` is the only accepted entry. The older `Read`, `Write`, and `everything` entries were removed: a config that still lists them fails with an error naming `Web`. For files, use the `files` setting below instead, which works on every provider. See the [developer overview](../developers/vox-agents/overview.md#models-and-configuration) for the full policy.
 
 ## File workspace
 

@@ -8,8 +8,8 @@
  */
 
 import { ModelMessage, StepResult, Tool } from "ai";
-import { Envoy, markBreakpointOnLast, MAX_CACHE_BREAKPOINTS } from "./envoy.js";
-import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
+import { Envoy } from "./envoy.js";
+import { cacheBreakpoint, countCacheBreakpoints, markBreakpointOnLast, MAX_CACHE_BREAKPOINTS } from "../utils/models/cache-breakpoint.js";
 import { StrategistParameters, buildGameContextMessages } from "../strategist/strategy-parameters.js";
 import { EnvoyThread } from "../types/index.js";
 import { VoxContext } from "../infra/vox-context.js";
@@ -126,7 +126,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
     // cache-control anchors. This assemble sets three (game context, past block, last ongoing row);
     // guard the ceiling so a future anchor added elsewhere surfaces as a warning here instead of a
     // provider error at request time.
-    const breakpointCount = messages.filter((m) => m.providerOptions?.anthropic?.cacheControl).length;
+    const breakpointCount = countCacheBreakpoints(messages);
     if (breakpointCount > MAX_CACHE_BREAKPOINTS) {
       logger.warn("Live envoy prompt exceeded the Anthropic cache-breakpoint ceiling", {
         breakpointCount, max: MAX_CACHE_BREAKPOINTS,

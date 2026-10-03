@@ -20,6 +20,7 @@ import type { Model, StreamingEventCallback } from "../types/index.js";
 import { streamTextWithConcurrency, withModelConfig } from "../utils/models/concurrency.js";
 import { getModel, buildProviderOptions, continuityThreshold } from "../utils/models/models.js";
 import { countRequestTokens } from "../utils/models/token-counter.js";
+import { countCacheBreakpoints, hasCacheBreakpoint, markBreakpointOnLast, MAX_CACHE_BREAKPOINTS } from "../utils/models/cache-breakpoint.js";
 import { formatModelReference } from '../utils/models/model-reference.js';
 import { emitProviderExecutedToolSpans } from "../utils/telemetry/provider-tool-spans.js";
 import { hostCapabilityTelemetryAttributes } from "../utils/telemetry/host-capabilities.js";
@@ -141,6 +142,13 @@ export async function executeAgent<TParameters extends AgentParameters>(
         }];
 
         messages.push(...prepared.messages);
+        // Files make multi-step runs likely, so the initial prompt is marked for prompt caching and
+        // later steps can re-read it. The marker sits in the history, so it is byte-stable across
+        // steps, and providers other than the Anthropic family ignore it.
+        if (host.files && !hasCacheBreakpoint(messages[messages.length - 1])
+          && countCacheBreakpoints(messages) < MAX_CACHE_BREAKPOINTS) {
+          markBreakpointOnLast(messages);
+        }
         const initialLength = messages.length;
         const allSteps: StepResult<ToolSet>[] = [];
         let finalText = "";
@@ -392,7 +400,7 @@ async function executeAgentStep<TParameters extends AgentParameters>(
       if (compacted) stepSpan.setAttribute('step.compacted', compacted);
       // Recorded separately: host-tool validation may throw, and the step
       // configuration above should already be on the span when it does.
-      stepSpan.setAttributes(hostCapabilityTelemetryAttributes(stepModel));
+      stepSpan.setAttributes(hostCapabilityTelemetryAttributes(stepModel, host.files));
 
       // Framing is recorded as an explicit fact, separate from prompt content:
       // step.tool_framing carries the resolved framing for the step. A callback rather

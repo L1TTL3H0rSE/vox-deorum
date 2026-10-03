@@ -1,6 +1,6 @@
 # just-bash workspace for all agents
 
-This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 6 done, including the Node 22.23.3 requirement, the `/databases` skip from Step 8, a web-only `host.capability` attribute (files telemetry is still Step 8), and the Web-only `hostTools` and capability-reminder paragraphs in `docs/developers/vox-agents/overview.md` from Step 8.
+This plan gives every agent optional file access through a simulated bash, and removes the Codex and Claude Code filesystem tools. Paths are relative to `vox-agents/src/` unless they start with `vox-agents/` or `docs/`. Status: Steps 0 to 8 done, including the Node 22.23.3 requirement. The manual checks under Verification are still open.
 
 ## Context
 
