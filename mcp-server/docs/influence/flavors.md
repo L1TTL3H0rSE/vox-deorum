@@ -93,14 +93,14 @@ Not all flavors steer the same AI subsystems. **Y** = primary influence, dot = s
 
 ## Notable flavor behaviors
 
-### Tactical combat (Offense)
+### Tactical combat (Offense and the tactical flavors)
 
-`Offense` uniquely drives `CvTacticalAI` combat behavior in `FindBestAssignmentsForUnits`:
+Tactical search reads five Vox Deorum flavors: `FLAVOR_RISK`, `FLAVOR_OCCUPATION`, `FLAVOR_ATTRITION`, `FLAVOR_HOLD_CITY`, and `FLAVOR_HOLD_GROUND`. A leader without its own `FLAVOR_RISK`, which is every leader by default, takes RISK from its `Offense` as the game rolled it, so by default `Offense` still sets tactical risk tolerance:
 
-- **Minimum HP for combat:** 50 HP at Offense=0, down to 30 HP at Offense=10 (`gMinHpForTactsim = 50 - 2 * iOffenseFlavor`).
-- **Unit-loss acceptance:** when Offense > 6 and the player has > 6 units, the AI accepts losing 1 unit per turn in tactical combat. Below that, it refuses any unit losses unless forced.
+- **Minimum HP for combat:** 50 HP at Offense 0, down to 30 HP at Offense 10.
+- **Unit-loss acceptance:** above Offense 6, a search with more than six units accepts losing one of them.
 
-No other flavor touches tactical-combat risk tolerance this directly. See [flavors/offense.md](../flavors/offense.md).
+The other four default to balanced. Strategy changes and custom flavors move all five, and higher RISK takes more risk. The game also keeps a per-civ modifier for searches against one enemy, set from Lua with `Player:SetTacticalFlavorModifiers(otherPlayer, { FLAVOR_RISK = 40 })` in game-range units and read back with `Player:GetTacticalFlavorModifiers(otherPlayer)`. `set-flavors` does not list the five tactical flavors yet, and no MCP tool sets the per-civ modifier. See the developer guide [Military Tactical Flavors](../../../docs/developers/civ5-dll/unit-ai/military-tactical-flavors.md) and [flavors/offense.md](../flavors/offense.md).
 
 ### Builder/worker tasking
 

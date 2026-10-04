@@ -61,12 +61,12 @@ Tactical AI refreshes a **posture**, a current-turn strategy for each dominance 
 | Withdraw | `PlotWithdrawMoves` → `ExecuteWithdrawMoves` | Retreat toward the safest neighboring zone or city. Take a ranged opportunity shot after a successful withdrawal when possible; if no safe route exists, pillage in place when worthwhile and move to the safest reachable plot. | No posture attack; the ranged opportunity exception uses Low when simulated. |
 | Hedgehog | `PlotHedgehogMoves` | Attack enemy units, then call `PlotReinforcementMoves` for early reinforcement before attacks in other zones. | Low |
 | Attrition | `PlotAttritionAttacks` | Attack enemy units with lower-risk target ordering. | Low |
-| Exploit flanks | `PlotExploitFlanksMoves` | Unit attacks → city capture. | Unit attacks: Medium. City capture: melee-count rule. |
+| Exploit flanks | `PlotExploitFlanksMoves` | Search around each enemy unit target, then try city capture with the units still available. | Unit attacks: Medium. City capture: melee-count rule. |
 | Counterattack | `PlotCounterattackMoves` | Attack priority enemy-unit targets. | Medium |
-| Surgical city strike | `PlotSurgicalCityStrikeMoves` | City capture → remaining unit attacks. | City capture: melee-count rule. Unit attacks: Medium. |
-| Steamroll | `PlotSteamrollMoves` | Unit attacks → city capture. | Unit attacks: High. City capture: melee-count rule. |
+| Surgical city strike | `PlotSurgicalCityStrikeMoves` | Try city capture first, then search around each enemy unit target with the units still available. | City capture: melee-count rule. Unit attacks: Medium. |
+| Steamroll | `PlotSteamrollMoves` | Search around each enemy unit target, then try city capture with the units still available. | Unit attacks: High. City capture: melee-count rule. |
 
-The city-capture rule is independent of posture: `ExecuteCaptureCityMoves` uses Medium with up to two melee attackers and High with more than two.
+Each step is a separate simulation aimed at its own target plot, and units that act in an earlier step are unavailable to later ones. Scoring still counts both city and unit damage in every step, so the order decides which target gets first claim on units, not which damage is valued. The city-capture rule is independent of posture: `ExecuteCaptureCityMoves` uses Medium with up to two melee attackers and High with more than two.
 
 Nearby army members affect the friendly strength used to calculate a zone's posture, but army members do not enter these posture routines. Operation movement runs first and the operation's goal controls army movement; zone dominance affects an army only through the contact safety veto above. Neighboring zones can still refine a posture, including naval steamroll near a stronger enemy land zone and withdrawal outside friendly territory near an enemy-dominated zone in the same domain.
 

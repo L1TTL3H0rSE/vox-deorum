@@ -66,7 +66,7 @@ Aggression controls the melee counter-damage trade veto and provisional danger t
 
 Within this block, every non-Braveheart level rejects an attack below three projected HP, including a killing attack. Braveheart bypasses that veto and the final extreme-danger block, but retains adjacent-enemy death-trap and limited-visibility edge checks.
 
-The RISK [military tactical flavor](military-tactical-flavors.md) can allow one casualty for large groups and sets the HP threshold below which wounded units stop following preferred-line positioning scores. Without a `FLAVOR_RISK` database entry, RISK comes from `FLAVOR_OFFENSE`. Final danger validation still applies.
+The RISK [military tactical flavor](military-tactical-flavors.md) can allow one casualty for large groups and sets the HP threshold below which wounded units stop following preferred-line positioning scores. Higher RISK takes more risk. By default it is 10 x the leader's offense, which keeps the stock thresholds. Final danger validation still applies.
 
 ### Search procedure
 
@@ -134,7 +134,7 @@ Intermediate movement applies provisional danger penalties. `ScoreCombatUnitTurn
 
 The queue explores shallower generations first, then deeper ones later. Within a generation it prefers the last-round heuristic: unscaled bonus and damage delta, plus new plot score, minus the old assignment plot score and any prior stored plot score. This separate accumulator can subtract the prior plot value twice. Accepted completed positions are ranked by cached total, then fewer assignments, then lower position ID.
 
-[Military tactical flavors](military-tactical-flavors.md) can scale selected damage, bonus, and end-of-turn terms. At their neutral value of 50, they leave these rules unchanged.
+[Military tactical flavors](military-tactical-flavors.md) can scale selected damage, bonus, and end-of-turn terms, weaken the pull into enemy territory, add terms for guarding cities and holding friendly ground, and, when RISK is set, change how much the danger penalty weighs. At their neutral value of 50, with RISK unset, they leave these rules unchanged.
 
 ### Acceptance and replay
 
