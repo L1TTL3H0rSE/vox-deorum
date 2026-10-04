@@ -77,7 +77,7 @@ Tactical and Homeland AI rebuild separate `m_CurrentTurnUnits` lists. Army membe
 
 ## Cross-cutting inputs
 
-**Flavors** steer production weights, force sizing, and combat risk. Vox Deorum can replace personality-derived values with custom Lua-supplied flavors. See [flavors](concepts.md#flavors) for the mode, expiration, and entry points, and [entry points and aggression](military-tactical-simulation.md#entry-points-and-aggression) for `FLAVOR_OFFENSE` in Tactical AI.
+**Flavors** steer production weights, force sizing, and combat risk. Vox Deorum can replace personality-derived values with custom Lua-supplied flavors. See [flavors](concepts.md#flavors) for the mode, expiration, and entry points, and [military tactical flavors](military-tactical-flavors.md) for how Tactical AI turns flavors into risk thresholds and score weights.
 
 ## Guide index
 
@@ -94,4 +94,5 @@ Tactical and Homeland AI rebuild separate `m_CurrentTurnUnits` lists. Army membe
 - [Military organization](military-organization.md): armies, formation slots, membership, and mustering.
 - [Military tactics](military-tactics.md): movement, postures, combat priorities, air and barbarian handling, and the Homeland handoff.
 - [Military tactical simulation](military-tactical-simulation.md): coordinated combat planning and pathfinding policy.
+- [Military tactical flavors](military-tactical-flavors.md): the five flavors that set risk thresholds and weight tactical scores.
 - [Civilian operation](civilian-operation.md): civilian persistent operations, Homeland role passes, and missions.

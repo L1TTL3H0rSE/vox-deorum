@@ -66,7 +66,7 @@ Aggression controls the melee counter-damage trade veto and provisional danger t
 
 Within this block, every non-Braveheart level rejects an attack below three projected HP, including a killing attack. Braveheart bypasses that veto and the final extreme-danger block, but retains adjacent-enemy death-trap and limited-visibility edge checks.
 
-`FLAVOR_OFFENSE` can allow one casualty for large groups and lowers the HP threshold below which wounded units stop following preferred-line positioning scores. Final danger validation still applies.
+The RISK [military tactical flavor](military-tactical-flavors.md) can allow one casualty for large groups and sets the HP threshold below which wounded units stop following preferred-line positioning scores. Without a `FLAVOR_RISK` database entry, RISK comes from `FLAVOR_OFFENSE`. Final danger validation still applies.
 
 ### Search procedure
 
@@ -133,6 +133,8 @@ Intermediate movement applies provisional danger penalties. `ScoreCombatUnitTurn
 `CvBasePosition::UpdateScore` caches a position total as `10 * (cumulative damage delta + cumulative bonuses) + sum of stored unit plot scores`. **The cached total lags plot updates:** it sums the stored entries before replacing the acting unit's entry. Completion also appends finish assignments and adds unused-unit plot bonuses without refreshing the total. The final ranking therefore does not fully reflect the final plot evaluations.
 
 The queue explores shallower generations first, then deeper ones later. Within a generation it prefers the last-round heuristic: unscaled bonus and damage delta, plus new plot score, minus the old assignment plot score and any prior stored plot score. This separate accumulator can subtract the prior plot value twice. Accepted completed positions are ranked by cached total, then fewer assignments, then lower position ID.
+
+[Military tactical flavors](military-tactical-flavors.md) can scale selected damage, bonus, and end-of-turn terms. At their neutral value of 50, they leave these rules unchanged.
 
 ### Acceptance and replay
 

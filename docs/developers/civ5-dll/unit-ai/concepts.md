@@ -15,7 +15,7 @@ Use this page to understand a shared input before following it into production, 
 
 Custom values use a 0 to 100 scale, with 50 as neutral. The game converts them to signed adjustments, applies them to the active personality and city recipients, and expires them after ten turns unless they are replaced. `CvLuaPlayer::lSetCustomFlavors` also uses thresholds to rewrite selected Economic and Military AI [strategy flags](#strategy-flags). These flags still affect gates and bonuses, but do not apply their normal XML flavor adjustments. A strategy disabled through Lua cannot be adopted again for ten turns.
 
-Read the owning guide for a decision's specific flavor effect: [production weights](production.md#candidate-sources-and-base-weights), [force sizing](military-production.md), [civilian demand](civilian-production.md), or [Tactical AI risk tolerance](military-tactical-simulation.md).
+Read the owning guide for a decision's specific flavor effect: [production weights](production.md#candidate-sources-and-base-weights), [force sizing](military-production.md), [civilian demand](civilian-production.md), or [Tactical AI risk and scoring](military-tactical-flavors.md).
 
 ## Strategy flags
 
