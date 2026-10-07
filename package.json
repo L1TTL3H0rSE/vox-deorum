@@ -19,7 +19,7 @@
     "vp-pr": "node scripts/utilities/vp-pr.mjs",
     "vp-diff": "node scripts/utilities/vp-diff.mjs",
     "update:dll": "node scripts/utilities/update-dll-pin.mjs",
-    "update:claude-agent-sdk": "npm update @anthropic-ai/claude-agent-sdk",
+    "update:claude-agent-sdk": "node scripts/utilities/update-claude-agent-sdk.mjs",
     "clean:all": "npm run clean -ws --if-present"
   },
   "author": "John Chen",
@@ -37,7 +37,7 @@
     "@ai-sdk/openai-compatible": "^3.0.53",
     "@ai-sdk/provider": "^4.0.17",
     "@ai-sdk/typesafe-ai": "^3.0.4",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.280",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.293",
     "@duckdb/node-api": "^1.4.4-r.3",
     "@google/genai": "^1.51.0",
     "@modelcontextprotocol/sdk": "^1.24.3",
