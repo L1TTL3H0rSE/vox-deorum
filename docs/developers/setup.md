@@ -20,15 +20,18 @@ The stack is five components ([architecture.md](architecture.md)): a C++ game DL
 
 ## Clone and install
 
-The repository uses git submodules (the DLL is one) and npm workspaces. Clone recursively and install once from the root:
+The repository uses git submodules (the DLL is one) and npm workspaces. Clone recursively and install the locked dependencies from the root:
 
 ```bash
 git clone --recursive https://github.com/CIVITAS-John/vox-deorum.git
 cd vox-deorum
-npm install --include=dev
+npm ci --include=dev
+npm --prefix vox-agents/ui ci --include=dev
 ```
 
 Because of npm workspaces, **all dependencies for `bridge-service`, `mcp-server`, and `vox-agents` install together** from the root. Never run `npm install` inside a single workspace. The same rule applies when adding a package.
+
+The web UI is a separate npm project with its own lockfile, outside the workspace list. The second command installs its dependencies before the build and tests. Use `npm install` from the root when intentionally changing workspace dependencies.
 
 Build all three TypeScript services at once:
 
