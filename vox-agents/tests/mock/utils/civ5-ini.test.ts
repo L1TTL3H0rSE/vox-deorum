@@ -76,6 +76,34 @@ describe('Civ config.ini seed updates', () => {
     expect(updated).toContain('[config]');
     expect(updated).toContain('syncrandseed=1');
   });
+
+  it('reads and updates LastCiv in the UserSettings section', () => {
+    const content = [
+      '[CONFIG]',
+      'SyncRandSeed = 0',
+      'MapRandSeed = 0',
+      '',
+      '[UserSettings]',
+      '; Last Civilization Played',
+      'LastCiv = 29'
+    ].join('\r\n');
+
+    expect(readCivConfigSeedsContent(content).lastCiv).toBe('29');
+
+    const updated = updateCivConfigSeedsContent(content, { sync: 1, map: 1, lastCiv: -1 });
+
+    expect(readCivConfigSeedsContent(updated)).toEqual({ sync: '1', map: '1', lastCiv: '-1' });
+    expect(updated).toContain('; Last Civilization Played');
+  });
+
+  it('leaves LastCiv untouched when it is omitted', () => {
+    const updated = updateCivConfigSeedsContent('[CONFIG]\nSyncRandSeed = 0\n[UserSettings]\nLastCiv = 29', {
+      sync: 1,
+      map: 1
+    });
+
+    expect(readCivConfigSeedsContent(updated).lastCiv).toBe('29');
+  });
 });
 
 describe('Civ config.ini legacy map script repair', () => {

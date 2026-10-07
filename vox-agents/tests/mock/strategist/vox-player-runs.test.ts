@@ -12,7 +12,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Make the player's promise-based sleeps instant (turn polling + the post-shutdown settle wait).
-vi.mock('node:timers/promises', () => ({ setTimeout: () => Promise.resolve() }));
+// Tests can observe each sleep through `sleepHook.onSleep` to change state between polls.
+const sleepHook = vi.hoisted(() => ({ onSleep: undefined as (() => void) | undefined }));
+vi.mock('node:timers/promises', () => ({
+  setTimeout: () => {
+    sleepHook.onSleep?.();
+    return Promise.resolve();
+  }
+}));
 
 import { VoxPlayer } from '../../../src/strategist/vox-player.js';
 import { HumanDecisionBus } from '../../../src/strategist/human-decision-bus.js';
@@ -25,6 +32,7 @@ import type { VoxRunOptions } from '../../../src/infra/vox-run.js';
 const playerConfig: PlayerConfig = { strategist: 'simple-strategist', llms: {} } as PlayerConfig;
 
 beforeEach(() => {
+  sleepHook.onSleep = undefined;
   // Telemetry exporters: keep construction + shutdown cheap and offline.
   vi.spyOn(VoxSpanExporter.getInstance(), 'createContext').mockResolvedValue(undefined);
   vi.spyOn(VoxSpanExporter.getInstance(), 'closeContext').mockResolvedValue(undefined);
@@ -78,5 +86,71 @@ describe('VoxPlayer per-turn root runs', () => {
 
     // The context's base parameters were never mutated per turn — turn is purely run-local.
     expect(player.context.getBaseParameters()?.turn).toBe(-1);
+  });
+
+});
+
+describe('VoxPlayer session pause gate', () => {
+  /**
+   * Drive one queued turn through a paused session. `pauseResults` are the successive
+   * pause-game results (later calls succeed). The session is resumed externally after
+   * `resumeAfterSleeps` polls, at which point the held state is snapshotted.
+   */
+  async function runPausedTurn(pauseResults: unknown[], resumeAfterSleeps: number) {
+    const session = { paused: true, isPaused() { return this.paused; } };
+    const player = new VoxPlayer({
+      playerID: 1,
+      playerConfig,
+      gameID: 'game-paused',
+      initialTurn: 0,
+      humanDecisionBus: new HumanDecisionBus(),
+      session: session as never,
+    });
+
+    const results = [...pauseResults];
+    const pauseCalls = () => callTool.mock.calls.filter((c) => c[0] === 'pause-game').length;
+    const callTool = vi.spyOn(player.context, 'callTool').mockImplementation(async (name: string) =>
+      (name === 'pause-game' ? (results.length > 0 ? results.shift() : true) : {}) as never);
+    vi.spyOn(player.context, 'execute').mockResolvedValue(undefined);
+
+    const turnsRun: Array<number | undefined> = [];
+    const realWithRun = player.context.withRun.bind(player.context);
+    vi.spyOn(player.context, 'withRun').mockImplementation((options: VoxRunOptions<StrategistParameters>, cb) => {
+      turnsRun.push(options.overrides?.turn);
+      return realWithRun(options, cb as never).then((result) => {
+        player.abort(true);
+        return result;
+      });
+    });
+
+    // Resume the session from outside after a fixed number of polls, recording what happened while held.
+    let sleeps = 0;
+    let whilePaused: { pauseCalls: number; turnsRun: number } | undefined;
+    sleepHook.onSleep = () => {
+      if (++sleeps !== resumeAfterSleeps) return;
+      whilePaused = { pauseCalls: pauseCalls(), turnsRun: turnsRun.length };
+      session.paused = false;
+    };
+
+    player.notifyTurn(1);
+    await player.execute();
+    return { whilePaused, turnsRun };
+  }
+
+  it('should hold the seat once and keep the turn queued until the session resumes', async () => {
+    const { whilePaused, turnsRun } = await runPausedTurn([], 10);
+
+    // One hold across all ten polls, and no turn ran while paused.
+    expect(whilePaused).toEqual({ pauseCalls: 1, turnsRun: 0 });
+    // The held turn ran after resume.
+    expect(turnsRun).toEqual([1]);
+  });
+
+  it('should retry a failed hold until it succeeds, then stop re-pausing', async () => {
+    // A bridge failure (false) and a thrown call (undefined) before the hold succeeds.
+    const { whilePaused, turnsRun } = await runPausedTurn([false, undefined], 10);
+
+    expect(whilePaused).toEqual({ pauseCalls: 3, turnsRun: 0 });
+    expect(turnsRun).toEqual([1]);
   });
 });

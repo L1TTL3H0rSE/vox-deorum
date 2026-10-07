@@ -6,6 +6,9 @@ const CONFIG_SECTION = 'CONFIG';
 const GAME_SETTINGS_SECTION = 'GameSettings';
 const SYNC_SEED_KEY = 'SyncRandSeed';
 const MAP_SEED_KEY = 'MapRandSeed';
+const USER_SETTINGS_SECTION = 'UserSettings';
+// The human slot's last chosen civilization. -1 means random.
+const LAST_CIV_KEY = 'LastCiv';
 const QUICK_COMBAT_KEY = 'SinglePlayerQuickCombatEnabled';
 const QUICK_MOVEMENT_KEY = 'SinglePlayerQuickMovementEnabled';
 const DEBUG_SECTION = 'DEBUG';
@@ -17,20 +20,23 @@ const legacyMapScriptPattern = /^(\s*LastMapScript\s*=.*?[\\/])\(1b\) Vox Deorum
  * Concrete values to write into Civ's config.ini.
  *
  * Restoration passes strings so we keep the previous textual seed values when
- * possible; launch-time writes pass numbers.
+ * possible; launch-time writes pass numbers. `lastCiv` is left untouched when
+ * omitted.
  */
 export interface CivConfigSeeds {
   sync: number | string;
   map: number | string;
+  lastCiv?: number | string;
 }
 
-/** Read Civ's pregame seed settings from raw config.ini content. */
-export function readCivConfigSeedsContent(content: string): { sync?: string; map?: string } {
+/** Read Civ's pregame seed settings and the human slot's last civ from raw config.ini content. */
+export function readCivConfigSeedsContent(content: string): { sync?: string; map?: string; lastCiv?: string } {
   const ini = new Ini(content);
   const config = getSectionIgnoreCase(ini, CONFIG_SECTION);
   return {
     sync: getValueIgnoreCase(config, SYNC_SEED_KEY),
-    map: getValueIgnoreCase(config, MAP_SEED_KEY)
+    map: getValueIgnoreCase(config, MAP_SEED_KEY),
+    lastCiv: getValueIgnoreCase(getSectionIgnoreCase(ini, USER_SETTINGS_SECTION), LAST_CIV_KEY)
   };
 }
 
@@ -41,6 +47,9 @@ export function updateCivConfigSeedsContent(content: string, seeds: CivConfigSee
 
   setValueIgnoreCase(config, SYNC_SEED_KEY, seeds.sync);
   setValueIgnoreCase(config, MAP_SEED_KEY, seeds.map);
+  if (seeds.lastCiv !== undefined) {
+    setValueIgnoreCase(getOrAddSection(ini, USER_SETTINGS_SECTION), LAST_CIV_KEY, seeds.lastCiv);
+  }
 
   return ini.stringify();
 }

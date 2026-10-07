@@ -103,7 +103,7 @@ beforeEach(() => {
 describe('VoxCivilization (mock tier)', () => {
   describe('seed save -> restore round-trip', () => {
     it('captures the original seeds, writes new ones, then restores the captured values', async () => {
-      mReadConfigSeeds.mockReturnValue({ sync: '777', map: '888' });
+      mReadConfigSeeds.mockReturnValue({ sync: '777', map: '888', lastCiv: '29' });
       const civ = new VoxCivilization();
 
       // Save: applyRandomSeeds reads config.ini, captures original, writes new.
@@ -112,17 +112,17 @@ describe('VoxCivilization (mock tier)', () => {
       expect(mGetUserFilePath).toHaveBeenCalledWith('config.ini');
       // Original values were read before overwriting.
       expect(mReadConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n');
-      // New seeds written as numbers.
-      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: 5, map: 9 });
+      // New seeds written as numbers, and the human slot's civ set to random.
+      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: 5, map: 9, lastCiv: -1 });
       expect(mWriteFile).toHaveBeenCalledWith(CONFIG_PATH, 'UPDATED', 'utf-8');
 
       mUpdateConfigSeeds.mockClear();
       mWriteFile.mockClear();
 
-      // Restore: the captured original seed strings are written back.
+      // Restore: the captured original seed strings and LastCiv are written back.
       await civ.restoreRandomSeeds();
 
-      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: '777', map: '888' });
+      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: '777', map: '888', lastCiv: '29' });
       expect(mWriteFile).toHaveBeenCalledWith(CONFIG_PATH, 'UPDATED', 'utf-8');
     });
 
@@ -132,7 +132,10 @@ describe('VoxCivilization (mock tier)', () => {
 
       await civ.applyRandomSeeds(); // no seeds provided
 
-      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('[CONFIG]\n', { sync: 0, map: 0 });
+      // An unseeded run leaves LastCiv alone.
+      const written = mUpdateConfigSeeds.mock.calls[0][1];
+      expect(written).toMatchObject({ sync: 0, map: 0 });
+      expect(written.lastCiv).toBeUndefined();
 
       mUpdateConfigSeeds.mockClear();
       await civ.restoreRandomSeeds();
@@ -187,7 +190,7 @@ describe('VoxCivilization (mock tier)', () => {
       await civ.applyRandomSeeds({ sync: 5, map: 9 });
 
       expect(mMkdir).toHaveBeenCalledWith(expect.any(String), { recursive: true });
-      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('', { sync: 5, map: 9 });
+      expect(mUpdateConfigSeeds).toHaveBeenCalledWith('', { sync: 5, map: 9, lastCiv: -1 });
       expect(mWriteFile).toHaveBeenCalledWith(CONFIG_PATH, 'UPDATED', 'utf-8');
 
       // Restore reads the file back, which exists by now.
