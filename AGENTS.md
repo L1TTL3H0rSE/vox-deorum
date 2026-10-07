@@ -11,7 +11,7 @@ Delegate less critical/lower-level BATCH work to subagents with less capabilitie
 Use OpenCode delegation if such a skill exists, with clear, bounded instructions. If OpenCode does not work, switch back to native subagents.
 
 DO NOT use weak models for complex diagnosis. For independent review, use OpenCode. For exploration and simple implementation task:
-- Claude Code: always delegate to OpenCode. Never use Sonnet or Haiku.
+- Claude Code: always delegate to OpenCode. Use Haiku for bounded and small context work.
 - Codex: always delegate to OpenCode or GPT-6-Luna. Never use Sol.
 
 ## Project Overview
