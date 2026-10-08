@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Event triggered when a player adopts or switches to a new policy branch (ideology)
- * in the social policy system.
+ * Event triggered when a player unlocks a policy branch, including a first ideology.
+ * Vox Deorum stores the game's IdeologyAdopted event under this name; the DLL skips the game's own
+ * PlayerAdoptPolicyBranch, which misses some adoption paths. Ideology switches are reported by IdeologySwitched.
  */
 export const PlayerAdoptPolicyBranch = z.object({
   /** The ID of the player who adopted the policy branch */
