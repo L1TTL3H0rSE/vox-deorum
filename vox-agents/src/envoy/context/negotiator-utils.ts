@@ -30,12 +30,23 @@ import {
   type InspectDealResult,
   type EnactDealResult,
 } from "../../utils/diplomacy/deal/deal.js";
-import { formatPromiseLabel, itemTypeLabel } from "../../../../mcp-server/dist/utils/deal-format.js";
+import {
+  formatDealTermsByDirection,
+  formatPromiseLabel,
+  itemTypeLabel,
+} from "../../../../mcp-server/dist/utils/deal-format.js";
+import { deriveProposalOutcomes } from "../../utils/diplomacy/deal/deal-reduce.js";
+import { identityOf } from "../../utils/diplomacy/transcript/transcript-utils.js";
 import {
   resolveLedger,
   formatResolutionErrors,
 } from "../ledger/ledger-resolver.js";
-import type { DealPayload, PromiseTerm } from "../../../../mcp-server/dist/utils/deal-schema.js";
+import {
+  DealPayloadSchema,
+  type DealPayload,
+  type DealTranscriptMessage,
+  type PromiseTerm,
+} from "../../../../mcp-server/dist/utils/deal-schema.js";
 import {
   endpoints,
   formatDealLedger,
@@ -137,6 +148,50 @@ export function formatActiveProposalLedger(
     ledgerContextFor(thread),
     { ...ledgerOptions, messageBlock }
   );
+}
+
+/**
+ * Format the conversation's recent closed proposals (context 3 history) so the negotiator remembers
+ * what was already offered and how it ended: who proposed it, on which turn, its outcome
+ * (rejected, accepted, enacted, or superseded without an answer), the answering line, and its terms.
+ * The still-open proposal is excluded because it is rendered in full elsewhere. Reads deal rows only,
+ * never the free-text thread. Returns undefined when there is no closed proposal.
+ */
+export function formatRecentDealHistory(
+  messages: DealTranscriptMessage[],
+  thread: EnvoyThread,
+  limit = 5
+): string | undefined {
+  const outcomes = deriveProposalOutcomes(messages);
+  const closed = messages.filter((m) => {
+    const outcome = outcomes.get(m.ID);
+    return outcome !== undefined && (outcome.status !== "open" || outcome.superseded);
+  });
+  if (closed.length === 0) return undefined;
+
+  const civName = (id: number): string => identityOf(thread, id)?.name ?? `Player ${id}`;
+  const entries = closed.slice(-limit).map((row) => {
+    const outcome = outcomes.get(row.ID)!;
+    const author = row.SpeakerID === thread.agent ? `YOU (${civName(row.SpeakerID)})` : civName(row.SpeakerID);
+    const status = outcome.status === "open" ? "superseded without an answer" : outcome.status;
+    const lines = [`## Proposal #${row.ID} (turn ${row.Turn}): by ${author}, ${status}`];
+    const parsed = DealPayloadSchema.safeParse(row.Payload.Deal);
+    if (parsed.success && parsed.data.message?.trim()) {
+      lines.push(`> Message: ${parsed.data.message.trim()}`);
+    }
+    const answer = outcome.responses[outcome.responses.length - 1]?.Content?.trim();
+    if (answer) lines.push(`> ${civName(outcome.responses[outcome.responses.length - 1]!.SpeakerID)} answered: ${answer}`);
+    if (parsed.success) {
+      const terms = formatDealTermsByDirection(
+        parsed.data, undefined, undefined, thread.player1ID, thread.player2ID, civName, thread.agent
+      );
+      // Demote the per-direction headings so they nest under this proposal's heading.
+      if (terms) lines.push(terms.replace(/^# /gm, "### "));
+    }
+    return lines.join("\n");
+  });
+
+  return ["# Recent Deal History", "Closed proposals in this conversation, oldest first.", ...entries].join("\n\n");
 }
 
 /**
@@ -311,7 +366,9 @@ export function createNegotiatorTerminalTools(context: VoxContext<StrategistPara
         Rationale: z.string().describe("Inward reasoning for the diplomat (not voiced verbatim)."),
         Message: z
           .string()
-          .describe("One single sentence the diplomat will voice to the counterpart."),
+          .describe(
+            "One spoken sentence the diplomat will voice to the counterpart: your main point or ask. The terms are shown to them separately, so do not list Give/Receive items here."
+          ),
         Give: termListSchema(
           "Terms YOUR civ gives the counterpart. Each term should follow the EXACT format from the " +
             'menu of what your civ can give following the example on its heading, e.g. "Gold 100", "Iron 2", ' +

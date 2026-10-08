@@ -284,7 +284,7 @@ Game.RegisterFunction("${Name}", function(${Arguments})
         MilitaryStrength = player:GetMilitaryMight(),  -- Total military strength (attack power of all units)
         PolicyBranches = nil,  -- Will be populated if player has policies
         FoundedReligion = nil,  -- Will be populated if player founded religion
-        MajorityReligion = player:GetStateReligionName(),
+        MajorityReligion = nil,  -- Will be populated from the religion in most of the player's cities
         Resources = nil,  -- Will be populated if player has resources
         Relationships = nil,  -- Will be populated if player has diplomatic relationships
         OutgoingTradeRoutes = nil,  -- Will be populated if player has outgoing trade routes
@@ -353,6 +353,16 @@ Game.RegisterFunction("${Name}", function(${Arguments})
           summary.FoundedReligion = "Pantheon (Religion Possible)"
         else
           summary.FoundedReligion = "Pantheon (Religion Impossible)"
+        end
+      end
+      
+      -- Majority religion: the religion followed in most of the player's cities. (GetStateReligionName
+      -- reads a key the DLL never sets, so it was always empty.) 0 is the pantheon, not a religion.
+      local majorityReligion = player:GetMajorityReligion()
+      if majorityReligion and majorityReligion > 0 then
+        local religionInfo = GameInfo.Religions[majorityReligion]
+        if religionInfo then
+          summary.MajorityReligion = Locale.ConvertTextKey(religionInfo.Description)
         end
       end
       

@@ -23,6 +23,7 @@ import '../../../../src/infra/agent-registry.js';
 import { Negotiator } from '../../../../src/envoy/agents/negotiator.js';
 import {
   createNegotiatorTerminalTools,
+  formatRecentDealHistory,
   type NegotiatorInput,
 } from '../../../../src/envoy/context/negotiator-utils.js';
 import { sessionRegistry } from '../../../../src/infra/session-registry.js';
@@ -153,6 +154,25 @@ function setOpenProposal(
       CreatedAt: 0,
     },
   ] }));
+}
+
+/** A stored proposal row from seat `speaker` carrying one gold term. */
+function dealProposalRow(id: number, speaker = 1): any {
+  return {
+    ID: id, Player1ID: 1, Player2ID: 3, Player1Role: 'the leader', Player2Role: 'negotiator',
+    SpeakerID: speaker, MessageType: 'deal-proposal', Content: 'Offer',
+    Payload: { Deal: { version: 1, message: `fixture-offer-${id}`, items: [{ fromPlayerID: 1, toPlayerID: 3, itemType: 'GOLD', amount: 10 }], promises: [] } },
+    Turn: 4, CreatedAt: 0,
+  };
+}
+
+/** A deal-reject row answering proposal `answers`. */
+function dealRejectRow(id: number, answers: number, speaker = 3): any {
+  return {
+    ID: id, Player1ID: 1, Player2ID: 3, Player1Role: 'the leader', Player2Role: 'negotiator',
+    SpeakerID: speaker, MessageType: 'deal-reject', Content: 'We decline.',
+    Payload: { ProposalMessageID: answers }, Turn: 4, CreatedAt: 0,
+  };
 }
 
 describe('accept-deal', () => {
@@ -794,6 +814,49 @@ describe('getInitialMessages task determination', () => {
     // The negotiator voices seat 3 (Germany), so the counterpart is Rome and its own cities render.
     expect(content(messages)).toContain('Cities & Diplomatic Standing (with Rome)');
     expect(content(messages)).toContain("## Germany's Cities (You)");
+  });
+
+  it('should include closed proposals and render the open offer once', async () => {
+    const rejected = dealProposalRow(5);
+    const superseded = dealProposalRow(7);
+    const open = dealProposalRow(8);
+    mcp.respondWith('read-transcript', structuredResult({ messages: [
+      rejected,
+      dealRejectRow(6, rejected.ID),
+      superseded,
+      open,
+    ] }));
+    mcp.respondWith('inspect-deal', structuredResult(emptyInspection));
+    const negotiator = new Negotiator();
+    const input = negotiatorInput();
+
+    const text = content(await negotiator.getInitialMessages(params, input, {} as any));
+
+    for (const proposal of [rejected, superseded, open]) {
+      expect(text.split(proposal.Payload.Deal.message)).toHaveLength(2);
+    }
+    expect(input.activeProposal).toEqual({ messageID: open.ID, deal: open.Payload.Deal });
+  });
+});
+
+describe('formatRecentDealHistory', () => {
+  it('returns undefined when the only proposal is still open', () => {
+    expect(formatRecentDealHistory([dealProposalRow(5)], thread())).toBeUndefined();
+  });
+
+  it('should keep the most recent closed proposals within the limit and exclude the open offer', () => {
+    const proposals = [1, 3, 5, 7].map((id) => dealProposalRow(id));
+    const messages = [
+      ...proposals.slice(0, 3).flatMap((proposal) => [proposal, dealRejectRow(proposal.ID + 1, proposal.ID)]),
+      proposals[3],
+    ];
+
+    const history = formatRecentDealHistory(messages, thread(), 2)!;
+
+    expect(history).toContain(proposals[1].Payload.Deal.message);
+    expect(history).toContain(proposals[2].Payload.Deal.message);
+    expect(history).not.toContain(proposals[0].Payload.Deal.message);
+    expect(history).not.toContain(proposals[3].Payload.Deal.message);
   });
 });
 

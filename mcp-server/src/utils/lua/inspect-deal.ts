@@ -193,6 +193,10 @@ export interface InspectDealResult {
    * time instead. Absent (or short) on a DLL/script without the check — consumers degrade OPEN.
    */
   promises?: { legal: boolean; reason: string }[];
+  /** True when the two players' teams are at war (every deal between them must then be a peace deal). */
+  atWar?: boolean;
+  /** Turns peace stays locked out between the pair (the DLL war lock); 0 when not locked. */
+  warLockTurns?: number;
   /** Set when the in-game scratch deal could not be obtained. */
   error?: string;
 }

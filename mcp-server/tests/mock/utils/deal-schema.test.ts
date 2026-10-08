@@ -1,11 +1,13 @@
 /**
  * Tests for the pinned deal-schema helpers — focused on `symmetrizeDeal`, which completes mutual
  * agreements (Declaration of Friendship / Defensive Pact / Research Agreement / Peace Treaty) onto
- * both sides so a one-sided pact is never inspected or stored.
+ * both sides so a one-sided pact is never inspected or stored, and `withPeaceTreaty`, which turns a
+ * deal between warring players into a peace deal.
  */
 import { describe, it, expect } from 'vitest';
 import {
   symmetrizeDeal,
+  withPeaceTreaty,
   applyDealDurations,
   SYMMETRIC_PROMISE_TYPES,
   TARGETED_PROMISE_TYPES,
@@ -149,6 +151,24 @@ describe('symmetrizeDeal', () => {
   it('leaves a non-mutual promise (Military) directional', () => {
     const input = promiseDeal([{ promiserID: 1, recipientID: 3, promiseType: 'MILITARY' }]);
     expect(symmetrizeDeal(input)).toBe(input);
+  });
+});
+
+describe('withPeaceTreaty', () => {
+  it('appends a Peace Treaty in each direction and keeps the other items (input untouched)', () => {
+    const input = deal([{ fromPlayerID: 1, toPlayerID: 3, itemType: 'GOLD', amount: 50 }]);
+    const out = withPeaceTreaty(input, 1, 3);
+    expect(out.items).toEqual([
+      { fromPlayerID: 1, toPlayerID: 3, itemType: 'GOLD', amount: 50 },
+      { fromPlayerID: 1, toPlayerID: 3, itemType: 'PEACE_TREATY' },
+      { fromPlayerID: 3, toPlayerID: 1, itemType: 'PEACE_TREATY' },
+    ]);
+    expect(input.items).toHaveLength(1);
+  });
+
+  it('returns the same deal object when a Peace Treaty is already present (same reference)', () => {
+    const input = deal([{ fromPlayerID: 1, toPlayerID: 3, itemType: 'PEACE_TREATY' }]);
+    expect(withPeaceTreaty(input, 1, 3)).toBe(input);
   });
 });
 

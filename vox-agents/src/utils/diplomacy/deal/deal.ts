@@ -43,6 +43,7 @@ import {
   applyDealDurations,
   resolveItemName,
   symmetrizeDeal,
+  withPeaceTreaty,
   TARGETED_PROMISE_TYPES,
   isDealMessage,
   type DealPayload,
@@ -247,6 +248,21 @@ function stampItemNames(deal: DealPayload, inspection: InspectDealResult): DealP
 }
 
 /**
+ * Inspect a deal about to be archived, turning any bridge failure into a plain error so the caller
+ * never stores a proposal it could not evaluate.
+ */
+async function inspectForArchival(thread: EnvoyThread, deal: DealPayload): Promise<InspectDealResult> {
+  try {
+    return await inspectDeal(thread.player1ID, thread.player2ID, deal);
+  } catch (error) {
+    logger.error("Could not inspect proposal before archival", { error });
+    throw new Error(
+      `Could not inspect deal before storing proposal: ${error instanceof Error ? error.message : "unknown error"}`
+    );
+  }
+}
+
+/**
  * Append a `deal-proposal` / `deal-counter` to the durable store, computing and attaching
  * the proposal-time per-item value snapshots from a fresh inspection before the archival
  * write. The speaker is the endpoint authoring the move (the human/caller in stage-4
@@ -282,21 +298,22 @@ export async function appendDealProposal(
   // any one-sided pact up front so the inspection, legality guard, value snapshots, and stored deal
   // all reflect the symmetric term (mirrors what the Web editor does on add). Same chokepoint for the
   // UI and negotiator paths, so neither can archive a one-sided pact the game would reject.
-  const symmetricDeal = symmetrizeDeal(deal);
+  let symmetricDeal = symmetrizeDeal(deal);
 
   // Transcript-shape validation is not best-effort: malformed terms must never be archived.
   validateDealForThread(thread, symmetricDeal);
 
   // Required value/agreement snapshot: if the game can't inspect this proposal right now,
   // do not archive a deal the diplomat/negotiator cannot evaluate faithfully.
-  let inspection: InspectDealResult;
-  try {
-    inspection = await inspectDeal(thread.player1ID, thread.player2ID, symmetricDeal);
-  } catch (error) {
-    logger.error("Could not inspect proposal before archival", { error });
-    throw new Error(
-      `Could not inspect deal before storing proposal: ${error instanceof Error ? error.message : "unknown error"}`
-    );
+  let inspection = await inspectForArchival(thread, symmetricDeal);
+
+  // Every deal between warring civs is a peace deal, exactly as the in-game trade screen makes it:
+  // the agent path's human-to-human legality skips the stock at-war block, so without this a
+  // commercial package could be enacted while the war goes on. The treaty is added here, not by the
+  // author, and re-inspected so its legality (a war lock refuses it below) and value are real.
+  if (inspection.atWar && !symmetricDeal.items.some((item) => item.itemType === "PEACE_TREATY")) {
+    symmetricDeal = withPeaceTreaty(symmetricDeal, thread.player1ID, thread.player2ID);
+    inspection = await inspectForArchival(thread, symmetricDeal);
   }
 
   // Hard legality guard: a proposal carrying any impossible term must never be archived.

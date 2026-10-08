@@ -124,6 +124,33 @@ describe('formatGiveReceiveLedger presentation', () => {
   });
 });
 
+describe('formatGiveReceiveLedger war status', () => {
+  /** The ledger blocks, one per paragraph (the war line, when present, is the first). */
+  const blocks = (text: string) => text.split('\n\n');
+  const ledger = (overrides: Partial<InspectDealResult>) =>
+    formatGiveReceiveLedger(inspectionWithIron(overrides), diplomatThread(), undefined, { presentation: 'diplomat' });
+
+  it('prepends one war line naming the counterpart when the pair is at war', () => {
+    const atPeace = ledger({});
+    const atWar = ledger({ atWar: true });
+
+    expect(blocks(atWar)).toHaveLength(blocks(atPeace).length + 1);
+    expect(blocks(atWar)[0]).toContain('Rome');
+    // At peace the first block is the presentation guidance, not a war line.
+    expect(blocks(atPeace)[0]).not.toContain('Rome');
+  });
+
+  it('names the remaining lock turns when the war lock is on, in a different line', () => {
+    const atWar = ledger({ atWar: true });
+    const locked = ledger({ atWar: true, warLockTurns: 4 });
+
+    expect(blocks(locked)).toHaveLength(blocks(atWar).length);
+    expect(blocks(locked)[0]).toContain('Rome');
+    expect(blocks(locked)[0]).toContain('4');
+    expect(blocks(locked)[0]).not.toBe(blocks(atWar)[0]);
+  });
+});
+
 describe('buildDealContextMessage', () => {
   it('inspects the bare pair once and shows possible items when no proposal is open', async () => {
     mcp.respondWith('inspect-deal', structuredResult(inspectionWithIron()));

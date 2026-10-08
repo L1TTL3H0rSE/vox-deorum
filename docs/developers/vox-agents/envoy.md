@@ -34,6 +34,7 @@ Both concrete envoys share prompt building blocks (`src/envoy/context/envoy-prom
 - The fictional-world framing.
 - An explicit disclaimer that the envoy has **no decision-making power**: it cannot bind its leader to anything.
 - A communication style that matches the leader's personality while staying strategically vague about sensitive details.
+- Staying in character without contradicting visible game facts: an envoy may spin events its own way or decline to discuss them, but it never denies what the other side can see.
 - Audience-aware framing: warm with allies, guarded or taunting with rivals, professionally courteous with neutrals.
 
 When the counterpart is a permanent teammate (the same team since game start, read from the cached players report), the audience framing changes. The envoy treats the team's interest as its own, shares plans and numbers openly, and coordinates instead of bargaining. The diplomat is also told to always report a teammate's plans, requests, commitments, warnings, and changes in situation. The negotiator likewise judges a teammate's deals by the team's combined benefit rather than driving a hard bargain.
@@ -59,7 +60,7 @@ The questions and routing live in `src/envoy/agents/diplomat.ts`. See [Models an
 
 ### Deals and negotiation
 
-Diplomats see the deal items the game currently allows each side to offer, but that is conversational awareness only. Deal terms and every accept, counter, or reject decision belong to the negotiator (`src/envoy/agents/negotiator.ts`), which works against the ledger in `src/envoy/ledger/`. When the diplomat hands a deal over, it picks a `Tier` to match the deal's complexity and stakes. The negotiator then runs on that tier's model (`negotiator.large` if configured, otherwise the shared `large` alias) without a triage evaluation of its own. The full round trip, from an in-game panel through the MCP deal tools and back, is described in [diplomacy.md](../diplomacy.md).
+Diplomats see the deal items the game currently allows each side to offer, but that is conversational awareness only. Deal terms and every accept, counter, or reject decision belong to the negotiator (`src/envoy/agents/negotiator.ts`), which works against the ledger in `src/envoy/ledger/`. The negotiator's context also carries its recent closed proposals (the Recent Deal History section) so it does not re-offer a package that was already rejected. Its outward `Message` is a spoken one-liner for the diplomat to voice, not a list of terms, because the terms are shown to the counterpart separately. When the diplomat hands a deal over, it picks a `Tier` to match the deal's complexity and stakes. The negotiator then runs on that tier's model (`negotiator.large` if configured, otherwise the shared `large` alias) without a triage evaluation of its own. The full round trip, from an in-game panel through the MCP deal tools and back, is described in [diplomacy.md](../diplomacy.md).
 
 ## How a chat reaches an envoy
 

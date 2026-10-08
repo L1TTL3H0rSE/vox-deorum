@@ -46,7 +46,9 @@
 --     defaultDuration = <int>,        -- standard deal duration (Game.GetDealDuration)
 --     peaceDuration = <int>,          -- peace-deal duration (Game.GetPeaceDuration)
 --     relationshipDuration = <int>,   -- DoF/denounce duration (Game.GetRelationshipDuration)
---     promiseTargets = { { playerID, teamID, name, kind }, ... }
+--     promiseTargets = { { playerID, teamID, name, kind }, ... },
+--     atWar = <bool>,                 -- the two teams are at war
+--     warLockTurns = <int>            -- turns peace stays locked out (0 when not locked)
 --   }
 -- Returns (enact mode) one table:
 --   { enacted = <bool>, reasons = { <string>, ... }, items = <per-item legality> }
@@ -683,6 +685,28 @@ deal:ClearItems()
 deal:SetFromPlayer(playerAID)
 deal:SetToPlayer(playerBID)
 
+-- War state for the pair. Stock trade screens make every deal between warring civs a peace deal,
+-- and the VD write path mirrors that by auto-adding a Peace Treaty (appendDealProposal), so the
+-- caller needs to know whether the pair is at war and whether peace is currently locked out.
+-- warLockTurns is the longer of the two directions of the DLL's war lock (CvTeam::canChangeWarPeace
+-- refuses peace while either is positive, e.g. after a coop or third-party war deal).
+local teamA = Players[playerAID]:GetTeam()
+local teamB = Players[playerBID]:GetTeam()
+local atWar = Teams[teamA]:IsAtWar(teamB)
+local warLockTurns = 0
+if atWar then
+  warLockTurns = math.max(Teams[teamA]:GetNumTurnsLockedIntoWar(teamB), Teams[teamB]:GetNumTurnsLockedIntoWar(teamA))
+end
+
+-- The DLL reports no reason for an untradeable Peace Treaty, so name the war lock when it applies.
+-- Any other empty reason is left for the TS layer's generic fallback.
+local function peaceReason(legal, reason)
+  if not legal and (reason == nil or reason == "") and warLockTurns > 0 then
+    return "Locked into war for " .. warLockTurns .. " more turns"
+  end
+  return reason
+end
+
 local resolved = {}
 for i, item in ipairs(proposedItems) do
   local giver = item.fromPlayerID
@@ -716,6 +740,7 @@ for i, r in ipairs(resolved) do
       legal, reason, vGive, vReceive = false, "City ID could not be resolved for the giving player.", 0, 0
     else
       legal, reason = legalityOf(deal, giver, receiver, enum, r.d1, r.d2, r.d3, r.f1)
+      if item.itemType == "PEACE_TREATY" then reason = peaceReason(legal, reason) end
       vGive, vReceive = valueOf(deal, giver, receiver, enum, r.v1, r.v2, r.v3, r.vf1, r.vdur)
     end
     items[i] = {
@@ -740,6 +765,11 @@ deal:SetToPlayer(playerBID)
 local range = {}
 range[tostring(playerAID)] = enumerateSide(deal, playerAID, playerBID)
 range[tostring(playerBID)] = enumerateSide(deal, playerBID, playerAID)
+for _, side in pairs(range) do
+  if side.peaceTreaty then
+    side.peaceTreaty.reason = peaceReason(side.peaceTreaty.legal, side.peaceTreaty.reason)
+  end
+end
 
 deal:ClearItems()
 
@@ -793,4 +823,6 @@ return {
   borderPromiseDuration = BORDER_PROMISE_DURATION,
   coopWarPromiseDuration = COOP_WAR_PROMISE_DURATION,
   promiseTargets = promiseTargets,
+  atWar = atWar,
+  warLockTurns = warLockTurns,
 }

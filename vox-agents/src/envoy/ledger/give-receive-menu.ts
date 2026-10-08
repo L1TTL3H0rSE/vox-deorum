@@ -251,6 +251,7 @@ export function formatGiveReceiveLedger(
     relBullets
   );
   return [
+    warStatusLine(inspection, counterpartName),
     presentation === "negotiator"
       ? "Each Give/Receive entry is ONE plain string. Follow the quoted example on each heading below. " +
         "Add a number only for Gold, Gold Per Turn, or a resource quantity; durations and vote counts are fixed by the game."
@@ -258,5 +259,19 @@ export function formatGiveReceiveLedger(
         "Do not construct or approve terms yourself; the negotiator remains responsible for deal decisions.",
     give,
     receive,
-  ].join("\n\n").trim();
+  ].filter(Boolean).join("\n\n").trim();
+}
+
+/**
+ * One line stating the pair's war status when they are at war: every deal between them is a peace
+ * deal (the Peace Treaty is added automatically on proposal), or no deal is possible while the war
+ * lock lasts. Returns undefined when the pair is at peace.
+ */
+function warStatusLine(inspection: InspectDealResult, counterpartName: string): string | undefined {
+  if (!inspection.atWar) return undefined;
+  const lockTurns = inspection.warLockTurns ?? 0;
+  if (lockTurns > 0) {
+    return `You are at war with ${counterpartName} and cannot make peace for ${lockTurns} more turns. No deal is possible until then.`;
+  }
+  return `You are at war with ${counterpartName}. Every deal is a peace deal: a Peace Treaty is added automatically.`;
 }

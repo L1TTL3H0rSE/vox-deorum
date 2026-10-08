@@ -233,6 +233,24 @@ export function symmetrizeDeal(deal: DealPayload): DealPayload {
 }
 
 /**
+ * Make a deal between two warring players a peace deal, as the in-game trade screen does: when the
+ * deal carries no `PEACE_TREATY`, append one in each direction (the same mutual shape
+ * {@link symmetrizeDeal} produces). Duration and name are left for the usual stamping steps. A deal
+ * that already has a Peace Treaty is returned unchanged. Returns a new deal; the input is not mutated.
+ */
+export function withPeaceTreaty(deal: DealPayload, playerA: number, playerB: number): DealPayload {
+  if (deal.items.some((i) => i.itemType === "PEACE_TREATY")) return deal;
+  return {
+    ...deal,
+    items: [
+      ...deal.items,
+      { itemType: "PEACE_TREATY", fromPlayerID: playerA, toPlayerID: playerB },
+      { itemType: "PEACE_TREATY", fromPlayerID: playerB, toPlayerID: playerA },
+    ],
+  };
+}
+
+/**
  * Per-item value snapshot map for one ordered player, stored on proposal/counter
  * messages as `Payload.Value1` (→ Player1ID) / `Payload.Value2` (→ Player2ID).
  * Keyed by trade-item index (as a string) into `Payload.Deal.items`, holding the

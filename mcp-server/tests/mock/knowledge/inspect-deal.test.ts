@@ -490,6 +490,23 @@ describe('inspect-deal', () => {
     inspectSpy.mockResolvedValue(null);
     await expect(tool.execute({ PlayerAID: 1, PlayerBID: 3 } as any)).rejects.toThrow(/could not inspect/);
   });
+
+  it('passes the atWar and warLockTurns pair from the Lua result into the response', async () => {
+    inspectSpy.mockResolvedValue(cannedResult({ atWar: true, warLockTurns: 3 }));
+
+    const result = await tool.execute({ PlayerAID: 1, PlayerBID: 3 } as any);
+
+    expect(result.atWar).toBe(true);
+    expect(result.warLockTurns).toBe(3);
+    expect(() => tool.outputSchema.parse(result)).not.toThrow();
+  });
+
+  it('leaves atWar and warLockTurns undefined when the Lua result omits them', async () => {
+    const result = await tool.execute({ PlayerAID: 1, PlayerBID: 3 } as any);
+
+    expect(result.atWar).toBeUndefined();
+    expect(result.warLockTurns).toBeUndefined();
+  });
 });
 
 /**

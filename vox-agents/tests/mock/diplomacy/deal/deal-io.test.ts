@@ -373,6 +373,74 @@ describe('appendDealProposal', () => {
   });
 });
 
+describe('appendDealProposal at war (automatic Peace Treaty)', () => {
+  /**
+   * An inspect-deal handler whose per-item verdicts stay index-aligned with whatever deal the call
+   * sent, so the re-inspection after the treaty is added sees its own terms (all legal unless the
+   * `overrides` say otherwise, e.g. `atWar`).
+   */
+  const inspectEcho = (overrides: Record<string, unknown> = {}) => (args: Record<string, unknown>) => {
+    const sent = args.ProposedDeal as { items: Array<Record<string, unknown>> };
+    return structuredResult({
+      items: sent.items.map((item) => ({
+        ...item,
+        legality: true,
+        reasons: [],
+        valueIfIGive: 10,
+        valueIfIReceive: 10,
+      })),
+      promises: [],
+      tradableRange: {},
+      ...overrides,
+    });
+  };
+  const goldDeal = {
+    version: 1 as const,
+    items: [{ fromPlayerID: 1, toPlayerID: 3, itemType: 'GOLD' as const, amount: 50 }],
+    promises: [],
+  };
+
+  it('adds a Peace Treaty in both directions and re-inspects when the pair is at war', async () => {
+    // The authored deal carries no treaty; the stored one must, and the second inspection is what
+    // makes the added term's legality and value real.
+    mcp.onTool('inspect-deal', inspectEcho({ atWar: true }));
+    mcp.respondWith('append-message', appendEcho({ ID: 61, Turn: 9 }));
+
+    const out = await appendDealProposal(thread(), 1, 'deal-proposal', goldDeal);
+
+    const inspected = mcp.calls('inspect-deal');
+    expect(inspected).toHaveLength(2);
+    const secondSent = (inspected[1]!.args.ProposedDeal as { items: Array<{ itemType: string }> }).items;
+    expect(secondSent.filter((i) => i.itemType === 'PEACE_TREATY')).toHaveLength(2);
+
+    const stored = (mcp.calls('append-message')[0]!.args.Payload as Record<string, unknown>).Deal as {
+      items: Array<Record<string, unknown>>;
+    };
+    expect(stored.items).toEqual([
+      { fromPlayerID: 1, toPlayerID: 3, itemType: 'GOLD', amount: 50 },
+      { fromPlayerID: 1, toPlayerID: 3, itemType: 'PEACE_TREATY' },
+      { fromPlayerID: 3, toPlayerID: 1, itemType: 'PEACE_TREATY' },
+    ]);
+    expect(out.deal.items).toHaveLength(3);
+  });
+
+  it.each([
+    ['absent from the inspection', undefined],
+    ['false', false],
+  ])('stores exactly the authored terms and inspects once when atWar is %s', async (_label, atWar) => {
+    mcp.onTool('inspect-deal', inspectEcho(atWar === undefined ? {} : { atWar }));
+    mcp.respondWith('append-message', appendEcho({ ID: 62, Turn: 9 }));
+
+    await appendDealProposal(thread(), 1, 'deal-proposal', goldDeal);
+
+    expect(mcp.calls('inspect-deal')).toHaveLength(1);
+    const stored = (mcp.calls('append-message')[0]!.args.Payload as Record<string, unknown>).Deal as {
+      items: unknown[];
+    };
+    expect(stored.items).toEqual(goldDeal.items);
+  });
+});
+
 describe('appendDealProposal promise legality (stage 7.04)', () => {
   /** An inspected promise verdict for the `COOP_WAR` term the tests author. */
   const inspectedPromise = (over: Record<string, unknown> = {}) => ({
