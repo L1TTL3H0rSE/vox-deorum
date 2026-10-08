@@ -164,6 +164,20 @@ describe('handleGameEvent', () => {
     expect(notifySpy).not.toHaveBeenCalled();
   });
 
+  it('stores IdeologyAdopted as PlayerAdoptPolicyBranch', async () => {
+    await store.handleGameEvent(10_000_004, 'IdeologyAdopted', { PlayerID: 1, BranchType: 9 });
+    const rows = await store.getDatabase().selectFrom('GameEvents').selectAll().execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ Type: 'PlayerAdoptPolicyBranch' });
+    expect(rows[0].Payload).toMatchObject({ PlayerID: 1, BranchType: 9 });
+  });
+
+  it('drops IdeologyAdopted for a branch being locked', async () => {
+    await store.handleGameEvent(10_000_005, 'IdeologyAdopted', { PlayerID: 1, BranchType: 9 }, undefined, { BranchLocked: true });
+    expect(await store.getDatabase().selectFrom('GameEvents').selectAll().execute()).toHaveLength(0);
+    expect(notifySpy).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['DiplomacyPanelOpened', { CounterpartID: 3, Turn: 10 }],
     ['DiplomacyChatMessage', { CounterpartID: 3, Turn: 10, Text: 'Hello.' }],

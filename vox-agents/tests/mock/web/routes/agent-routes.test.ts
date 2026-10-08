@@ -423,6 +423,23 @@ describe('agent routes', () => {
       expect(ctx.abort).not.toHaveBeenCalled();
     });
 
+    it('streams and keeps the retry line when an ordinary chat run speaks nothing', async () => {
+      const ctx = makeMockContext({ session: { getTurn: () => 7 }, baseParameters: liveBase(7) });
+      // The run only wrote raw free text, which a send-message-only voice never shows.
+      ctx.execute = vi.fn(async (_n: string, input: any) => {
+        input.messages.push({ message: { role: 'assistant', content: [{ type: 'text', text: 'musing' }] }, metadata: { datetime: new Date(), turn: 7 } });
+        return input;
+      });
+      const chatId = await openLiveChat(ctx);
+
+      const res = await request(app).post('/api/agents/message').send({ kind: 'text', chatId, message: 'hi' });
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(retryMessage);
+
+      const thread = await request(app).get(`/api/agents/chat/${chatId}`);
+      expect(thread.body.messages.at(-1).message).toEqual({ role: 'assistant', content: retryMessage });
+    });
+
     it('aborts only the request run (not the context) when the client disconnects mid-generation', async () => {
       const ctx = makeMockContext({ session: { getTurn: () => 7 }, baseParameters: liveBase(7) });
       // Hang inside the run until the client drops; the route's close listener calls run.abort().

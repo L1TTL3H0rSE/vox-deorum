@@ -10,7 +10,9 @@
  *  (2) what is tradable and each item's value — the `inspect-deal` results (tradable range +
  *      per-term legality/value + promise agreeability), run UPFRONT by the loop and placed in
  *      its context (it does not call inspect-deal itself);
- *  (3) what is on the table — the active proposal the diplomat relays (absent when proposing).
+ *  (3) what is on the table — the active proposal the diplomat relays (absent when proposing),
+ *      plus the recent closed proposals in this conversation and how each ended, so it does not
+ *      re-offer a package that was already turned down.
  *
  * It chooses EXACTLY ONE of three terminal tools per invocation, each returning an inward
  * `Rationale` (reasoning for the diplomat, never voiced verbatim):
@@ -31,9 +33,9 @@ import { StrategistParameters, buildGameContextMessages, getRecentGameState } fr
 import { createBriefingTool } from "../../briefer/briefing-utils.js";
 import { createLogger } from "../../utils/logger.js";
 import type { EnvoyThread } from "../../types/index.js";
-import { inspectDeal, readActiveProposal, type InspectDealResult } from "../../utils/diplomacy/deal/deal.js";
+import { inspectDeal, readDealMessages, type InspectDealResult } from "../../utils/diplomacy/deal/deal.js";
 import { PROMISE_METADATA } from "../../../../mcp-server/dist/utils/deal-schema.js";
-import { activeProposalDeal } from "../../utils/diplomacy/deal/deal-reduce.js";
+import { activeProposalDeal, deriveActiveProposal } from "../../utils/diplomacy/deal/deal-reduce.js";
 import { resolveNegotiator } from "./resolve-negotiator.js";
 import { getTeammateCounterpart } from "../context/diplomacy-context.js";
 import { negotiatorTeammateExpectation } from "../context/envoy-prompts.js";
@@ -42,6 +44,7 @@ import {
   createNegotiatorTerminalTools,
   formatActiveProposalLedger,
   formatGiveReceiveLedger,
+  formatRecentDealHistory,
   summarizeMove,
   type NegotiatorInput,
 } from "../context/negotiator-utils.js";
@@ -156,13 +159,15 @@ ${stance}
 - There is no user (to respond to), so you ALWAYS and ONLY properly call tools to convey your decisions.
 - Your context includes a fresh inspection and evaluation of the deal on the table (if exists) and all tradable items. 
 - In-game AI's evaluation of deal terms are ADVISORY only. You will make independent judgment based on the leader's intention.
+- Check the Recent Deal History (if any). Do not re-offer a package that was already rejected unless circumstances have changed.
 - You always use the correct tool-calling format for each tool provided in the prompt. Double check that before sending out.
 
 # Goals
 Your goal is to **call EXACTLY ONE terminal tool** after gathering sufficient information.
 - Use the \`accept-deal\` tool to accept the on-the-table deal exactly as-is.
 - Use the \`reject-deal\` tool to decline the on-the-table deal exactly as-is.
-- Use the \`propose-deal\` tool to author a (counter) proposal. You must include a one-sentence outward \`Message\` for the diplomat to voice.
+- Use the \`propose-deal\` tool to author a (counter) proposal.
+  - You must include a one-sentence outward \`Message\` to the counterpart. Do not repeat the terms.
   - Author \`Give\` (what YOUR civ gives the counterpart) and \`Receive\` (what the counterpart gives YOUR civ); each is a term string or a list of term strings.
     - Each entry is ONE plain string. Follow the quoted example on each Tradable Terms heading.
     - Append a number only for Gold, Gold Per Turn, or a resource quantity (e.g. "Gold 100", "Iron 2").
@@ -194,7 +199,9 @@ You can access additional information by calling the following tools.
     const civName = parameters.metadata?.YouAre?.Name ?? "your civilization";
 
     // (3) what is on the table — reduce the transcript and forward the open offer from either side.
-    const reduction = await readActiveProposal(thread.player1ID, thread.player2ID);
+    // The same deal rows also feed the closed-proposal history below.
+    const dealMessages = await readDealMessages(thread.player1ID, thread.player2ID);
+    const reduction = deriveActiveProposal(dealMessages);
     const selfAuthored = reduction.status === "open" && reduction.active?.SpeakerID === thread.agent;
     if (reduction.active && reduction.status === "open") {
       const deal = activeProposalDeal(reduction);
@@ -237,6 +244,10 @@ You can access additional information by calling the following tools.
         "There is no deal from the counterpart on the table. Construct opening terms with propose-deal using the menu below."
       );
     }
+
+    // What was already offered and how it ended, so a turned-down package is not repeated.
+    const history = formatRecentDealHistory(dealMessages, thread);
+    if (history) sections.push(history);
 
     // The Give/Receive menu (context 2): the available terms, by NAME, that propose-deal expects.
     sections.push(

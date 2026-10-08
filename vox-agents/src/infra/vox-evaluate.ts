@@ -24,6 +24,19 @@ import type { ExecutionHost } from "./vox-telemetry.js";
 import { getEvaluationModel } from "../utils/models/evaluation.js";
 import { coerceEvaluationInput } from "../utils/models/evaluation-questions.js";
 import { formatModelReference } from "../utils/models/model-reference.js";
+import { inputTokenLimit } from "../utils/models/models.js";
+import { countTokens } from "../utils/models/token-counter.js";
+
+/**
+ * Build the error for a state larger than the model's input limit. The `__contextLengthError`
+ * tag lets `isContextLengthError` route it into the same fallbacks as a provider's overflow.
+ */
+function oversizeStateError(model: Model, tokens: number, limit: number): Error {
+  return Object.assign(
+    new Error(`Evaluation state of about ${tokens} tokens exceeds the ${limit}-token input limit of ${formatModelReference(model)}.`),
+    { __contextLengthError: true },
+  );
+}
 
 /**
  * Options for one evaluation call: the question set asked of the model and the per-call token
@@ -81,6 +94,14 @@ export async function evaluateOn<TParameters extends AgentParameters, TQuestions
   // (the chat-model adapter's step) parent to it in the active context.
   return await context.with(trace.setSpan(context.active(), span), async () => {
     try {
+      // Refuse an oversized state before the provider call, so callers can trim and retry.
+      const limit = inputTokenLimit(model);
+      if (limit !== undefined) {
+        const tokens = countTokens(typeof input === 'string' ? input : JSON.stringify(input));
+        span.setAttribute('evaluate.state_tokens', tokens);
+        if (tokens > limit) throw oversizeStateError(model, tokens, limit);
+      }
+
       const result = await experimental_evaluate({
         model: getEvaluationModel(model, host),
         state: input,

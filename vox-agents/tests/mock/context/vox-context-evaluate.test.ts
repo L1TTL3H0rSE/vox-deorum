@@ -3,8 +3,9 @@
  * VoxContext.evaluate()). The evaluation-model factory is mocked so `experimental_evaluate` runs
  * for real against a stub model with a scripted result (usage plus TypeSafe-style confidence
  * metadata). Covers the active-run requirement, answer/usage flow-back, token accrual to the run
- * handle, the seat-wide totals, and the per-call token output, the `evaluate` span contract, and
- * error recording with a re-throw. Same tracer idiom as vox-execute.test.ts.
+ * handle, the seat-wide totals, and the per-call token output, the `evaluate` span contract, the
+ * input-limit guard that refuses an oversized state before the provider call, and error recording
+ * with a re-throw. Same tracer idiom as vox-execute.test.ts.
  */
 
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
@@ -25,6 +26,7 @@ import { VoxContext } from '../../../src/infra/vox-context.js';
 import { VoxAgent, type AgentParameters } from '../../../src/infra/vox-agent.js';
 import { agentRegistry } from '../../../src/infra/agent-registry.js';
 import { getEvaluationModel } from '../../../src/utils/models/evaluation.js';
+import { isContextLengthError } from '../../../src/utils/retry.js';
 import type { StrategistParameters } from '../../../src/strategist/strategy-parameters.js';
 import { makeStrategistParameters } from '../../helpers/fake-vox-context.js';
 import { recordSpans } from '../../helpers/recording-tracer.js';
@@ -210,6 +212,8 @@ describe('VoxContext.evaluate success path', () => {
       'evaluate.purpose': 'execution',
       'evaluate.state': '{"a":1}',
       'evaluate.questions': JSON.stringify(questions),
+      // Typesafe models carry an input limit, so the guard's token estimate is recorded too.
+      'evaluate.state_tokens': expect.any(Number),
       'evaluate.answers': JSON.stringify({ urgent: { type: 'boolean', probability: 0.7 } }),
       'evaluate.confidence': JSON.stringify(confidence),
       'tokens.input': 30,
@@ -263,6 +267,51 @@ describe('VoxContext.evaluate success path', () => {
       'agent.name': evaluationAgent.name,
       'evaluate.purpose': 'execution',
     });
+  });
+});
+
+describe('VoxContext.evaluate input limit', () => {
+  it('should refuse a state over the model input limit without calling the provider', async () => {
+    // A one token limit trips the guard on any state, so trimming callers get the fallback
+    // signal instead of a provider error from a request that was never sent.
+    const crampedModel = { provider: 'typesafe', name: 'jev-latest', options: { maxInputTokens: 1 } } as Model;
+    const ctx = new VoxContext<StrategistParameters>({}, 'eval-oversize');
+    const spans = recordSpans(ctx);
+    let failure: unknown;
+    let runTokens: { inputTokens: number; reasoningTokens: number; outputTokens: number } | undefined;
+
+    await ctx.withRun({ parameters: makeStrategistParameters(), overrides: { turn: 7 } }, async (run) => {
+      failure = await ctx.evaluate(crampedModel, { a: 1 }, { questions }).catch((error: unknown) => error);
+      runTokens = run.tokens;
+    });
+
+    // Tagged as a context-length failure so the same trims that handle a provider overflow apply.
+    expect(isContextLengthError(failure)).toBe(true);
+    expect(factory).not.toHaveBeenCalled();
+    expect(runTokens).toEqual({ inputTokens: 0, reasoningTokens: 0, outputTokens: 0 });
+    expect(ctx.inputTokens).toBe(0);
+    expect(ctx.outputTokens).toBe(0);
+
+    const span = spans.find(s => s.name === 'evaluate')!;
+    expect(span.attributes['evaluate.state_tokens']).toBeGreaterThan(1);
+    expect(span.exception).toBeInstanceOf(Error);
+    expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    expect(span.ended).toBe(true);
+  });
+
+  it('should not size-check a model with no known input limit', async () => {
+    // Unlimited providers keep the pre-guard behavior: the state goes straight to the model.
+    const unlimitedModel = { provider: 'openai', name: 'gpt-x' } as Model;
+    const ctx = new VoxContext<StrategistParameters>({}, 'eval-unlimited');
+    const spans = recordSpans(ctx);
+
+    await ctx.withRun({ parameters: makeStrategistParameters(), overrides: { turn: 7 } }, async () => {
+      await ctx.evaluate(unlimitedModel, { a: 1 }, { questions });
+    });
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    const span = spans.find(s => s.name === 'evaluate')!;
+    expect(span.attributes).not.toHaveProperty('evaluate.state_tokens');
   });
 });
 

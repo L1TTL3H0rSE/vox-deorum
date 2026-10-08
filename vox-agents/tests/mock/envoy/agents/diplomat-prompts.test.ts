@@ -43,13 +43,6 @@ function thread(partial: Partial<EnvoyThread> = {}): EnvoyThread {
   };
 }
 
-/** A thread whose last message is the {{{Greeting}}} special trigger. */
-function greetingThread(): EnvoyThread {
-  return thread({
-    messages: [{ message: { role: 'user', content: '{{{Greeting}}}' }, metadata: { datetime: new Date(0), turn: 5 } }],
-  });
-}
-
 const params = { playerID: 3, turn: 5, metadata: { YouAre: { Name: 'Germany', Leader: 'Bismarck' } }, gameStates: {} };
 
 describe('Diplomat tool set', () => {
@@ -86,14 +79,6 @@ describe('Diplomat.getSystem', () => {
   it('directs the diplomat to speak only through send-message', async () => {
     const system = await diplomat.getSystem(params, thread(), undefined);
     expect(system).toContain('send-message');
-    // The instruction is present in both modes — even a greeting speaks through the tool.
-    const greeting = await diplomat.getSystem(params, greetingThread(), undefined);
-    expect(greeting).toContain('send-message');
-  });
-
-  it('omits the resources block in special (greeting) mode', async () => {
-    const system = await diplomat.getSystem(params, greetingThread(), undefined);
-    expect(system).not.toContain('# Your Resources');
   });
 });
 
@@ -158,14 +143,6 @@ describe('Spokesperson.getSystem', () => {
     expect(system).toContain('get-diplomatic-events');
     expect(system).toContain('send-message');
   });
-
-  it('omits the tool section in special (greeting) mode', async () => {
-    const system = await spokesperson.getSystem(params, greetingThread(), undefined);
-    expect(system).not.toContain('# Available Tools');
-    // The audience section is still assembled by reference in special mode.
-    expect(system).toContain(audienceSection('the leader of Rome'));
-    expect(system).toContain(communicationStyle);
-  });
 });
 
 describe('teammate counterpart', () => {
@@ -192,12 +169,6 @@ describe('teammate counterpart', () => {
   it('keeps the default audience for players on different teams', async () => {
     const system = await diplomat.getSystem(teamParams(3), thread(), undefined);
     expect(system).toContain(audienceSection('the leader of Rome'));
-    expect(system).not.toContain(diplomatTeammateReporting);
-  });
-
-  it('omits the reporting section in special (greeting) mode', async () => {
-    const system = await diplomat.getSystem(teamParams(1), greetingThread(), undefined);
-    expect(system).toContain(audienceSection('the leader of Rome', { civName: 'Rome' }));
     expect(system).not.toContain(diplomatTeammateReporting);
   });
 

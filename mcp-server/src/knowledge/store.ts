@@ -41,7 +41,9 @@ const renamedEventTypes: Record<string, string> = {
   "PlayerBuilding": "UnitBuildStart",
   "UnitSetXY": "UnitMoved",
   "EspionageNotificationData": "EspionageResult",
-  "CityExtendsWLTKD": "CityExtendsWeLoveKingDay"
+  "CityExtendsWLTKD": "CityExtendsWeLoveKingDay",
+  // IdeologyAdopted fires on every branch unlock; the DLL skips the game's own PlayerAdoptPolicyBranch
+  "IdeologyAdopted": "PlayerAdoptPolicyBranch"
 }
 
 /**
@@ -272,6 +274,8 @@ export class KnowledgeStore {
       if (payload["PlotX"] == -2147483647 || payload["PlotY"] == -2147483647) 
         return;
       if (payload["OldPopulation"] && payload["OldPopulation"] == payload["NewPopulation"])
+        return;
+      if (type == "IdeologyAdopted" && extraPayload?.["BranchLocked"])
         return;
 
       // Validate the event object against the schema

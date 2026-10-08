@@ -57,10 +57,10 @@ vi.mock('ai-sdk-provider-claude-code', () => {
   return { createClaudeCode: () => factory, claudeCode: factory };
 });
 
-import { getModel, getModelConfig, resolveToolFraming } from '../../../src/utils/models/models.js';
+import { getModel, getModelConfig, inputTokenLimit, resolveToolFraming } from '../../../src/utils/models/models.js';
 import { toolRescueMiddleware } from '../../../src/utils/models/tool-rescue/middleware.js';
 import { capabilityHeading, capabilityInstruction } from '../../../src/utils/models/capability-prompt.js';
-import type { ResolvedFilesConfig } from '../../../src/types/index.js';
+import type { Model, ResolvedFilesConfig } from '../../../src/types/index.js';
 
 /** Build a ReadableStream that emits the given chunks then closes (for wrapStream tests). */
 function streamFrom(chunks: any[]): ReadableStream<any> {
@@ -1330,6 +1330,34 @@ describe('typesafe provider', () => {
     // agent would silently hit OPENAI_COMPATIBLE_URL with a bogus model name.
     expect(() => getModel({ provider: 'typesafe', name: 'jev-latest' }))
       .toThrow('Provider \'typesafe\' serves evaluation models only and cannot back a chat agent');
+  });
+});
+
+describe('inputTokenLimit', () => {
+  /** A model config shaped for input limit resolution, with an optional explicit limit. */
+  function modelConfig(provider: string, name: string, maxInputTokens?: unknown): Model {
+    const options: Record<string, any> | undefined =
+      maxInputTokens === undefined ? undefined : { maxInputTokens };
+    return { provider, name, options } as Model;
+  }
+
+  it('should give the TypeSafe default and leave unlimited providers undefined', () => {
+    // Jev rejects state over its 32k cap, so an unlimited typesafe model would fail every call.
+    expect(inputTokenLimit(modelConfig('typesafe', 'jev-latest'))).toBe(30_000);
+    expect(inputTokenLimit(modelConfig('openai', 'gpt-x'))).toBeUndefined();
+    expect(inputTokenLimit(modelConfig('openrouter', 'qwen/qwen3'))).toBeUndefined();
+  });
+
+  it('should honor an explicit limit over the provider default', () => {
+    expect(inputTokenLimit(modelConfig('typesafe', 'jev-latest', 12_000))).toBe(12_000);
+    expect(inputTokenLimit(modelConfig('openai', 'gpt-x', 12_000))).toBe(12_000);
+  });
+
+  it('should fall back to the provider default for non-positive, non-finite, or non-numeric values', () => {
+    for (const value of [0, -1, NaN, Infinity, '5000']) {
+      expect(inputTokenLimit(modelConfig('typesafe', 'jev-latest', value))).toBe(30_000);
+      expect(inputTokenLimit(modelConfig('openai', 'gpt-x', value))).toBeUndefined();
+    }
   });
 });
 

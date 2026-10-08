@@ -362,7 +362,7 @@ export type GetChatResponse = EnvoyThread & ChatResponseEnrichment;
 
 /**
  * A plain-text chat turn for the unified `/api/agents/message` streaming route. Also carries the
- * `{{{Greeting}}}` trigger (an agent-initiated reply on an empty/stale thread) as its `message`.
+ * `{{{Greeting}}}` trigger (a telepathist's opening reply on an empty/stale database thread) as its `message`.
  */
 export interface TextMove {
   kind: 'text';

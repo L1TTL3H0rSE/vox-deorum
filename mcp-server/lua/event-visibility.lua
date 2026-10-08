@@ -152,6 +152,18 @@ local function shapeDealMadePayload(payload)
   extraPayloads["TurnsRemaining"] = turnsRemaining
 end
 
+-- IdeologyAdopted also fires when a branch is locked again (the old ideology in a switch); flag it so the store drops it
+local function flagLockedBranch(payload)
+  if currentEventType ~= "IdeologyAdopted" then
+    return
+  end
+
+  local player = Players[payload.PlayerID]
+  if player and not player:IsPolicyBranchUnlocked(payload.BranchType) then
+    extraPayloads["BranchLocked"] = true
+  end
+end
+
 -- Whitelist of events that should be propagated to met players with reduced visibility
 local eventsToMetPlayers = {"CircumnavigatedGlobe", "CapitalChanged",
   "NuclearDetonation", "PantheonFounded", "IdeologyAdopted", "IdeologySwitched", "PlayerAnarchy", "PlayerGoldenAge", "PlayerLiberated",
@@ -384,6 +396,7 @@ Game.RegisterFunction("${Name}", function(${Arguments})
   extraPayloads = {}
   currentEventType = eventType
   shapeDealMadePayload(payload)
+  flagLockedBranch(payload)
 
   -- Analyze visibility based on event type and payload
   for key, value in pairs(payload) do

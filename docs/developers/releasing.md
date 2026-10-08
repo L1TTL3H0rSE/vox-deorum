@@ -6,12 +6,13 @@ Releases are made by a GitHub Actions workflow, not by hand. This page explains 
 
 ## The release workflow
 
-`.github/workflows/release.yml` (named **Release Version**) is the canonical path. It only runs on manual dispatch, and it takes two inputs:
+`.github/workflows/release.yml` (named **Release Version**) is the canonical path. It only runs on manual dispatch, usually through `npm run release` (see [Release notes](#release-notes)), and it takes three inputs:
 
 | Input | Meaning |
 | --- | --- |
 | `version_type` | `patch`, `minor`, `major`, or `none`. Chooses how `version.json` is bumped. |
 | `dry_run` | When true, the job builds and verifies the installer but makes no commit, tag, or release. |
+| `release_notes` | Optional Markdown used as the release message. When empty, the last commit message is used instead. |
 
 The job runs on `windows-latest` and checks out the repository with submodules and Git LFS. From there it:
 
@@ -25,11 +26,9 @@ Because step 4 pushes straight to `main`, run the workflow from a `main` that is
 
 ### What ends up in the release body
 
-The workflow reads a commit message with `git log -1` and uses it for both the tag annotation and the GitHub release body. A fixed template wraps it, linking the CivFanatics forum thread, naming the installer file, and linking the commit history.
+The workflow picks one release message and uses it for both the tag annotation and the GitHub release body. A fixed template wraps it, linking the CivFanatics forum thread, naming the installer file, and linking the commit history. A dry run prints the chosen message in its summary.
 
-That read happens before the workflow makes its own `Release v<version>` commit, so what it picks up is the last non-merge commit already on `main` when you dispatch the run. Dry runs and real runs see the same commit. Since the last thing you commit before releasing is usually the changelog, that commit message is what readers will see. Tags from before this was fixed are annotated exactly `Release v<version>`.
-
-Even so, **the GitHub release body is not the changelog**: it is one commit message. Treat it as a landing page for the installer download and link readers to the version's page under `docs/versions/`.
+The message is the `release_notes` input when one is given. Otherwise the workflow falls back to the last non-merge commit already on `main` when you dispatch the run, read before the workflow makes its own `Release v<version>` commit. Tags from before this fallback existed are annotated exactly `Release v<version>`.
 
 ### The pre-built DLL
 
@@ -59,16 +58,13 @@ Releases are tagged `vMAJOR.MINOR.REVISION`. The DLL is a submodule with its own
 
 Per-release changelogs live in [`docs/versions/`](../versions/), one Markdown file per version. Each opens with a headline giving the version and date plus a one-line summary of the release's theme, then groups changes under short thematic headings such as Diplomacy & Deals, Under the Hood, or Not Yet Done. Any savegame-compatibility or DLL-base change is called out there. These are the canonical changelogs and the only release documentation in the standing doc tree.
 
-Drafting and publishing are separate steps with different rules:
+Every release, themed or not, goes through the same three steps:
 
-- **Drafting.** Follow the survey process in the root `AGENTS.md`. Read the last tag from `release.txt`, then look at what changed since it, and print short grouped bullets to the console for review. That step deliberately writes no files, so nothing half-finished lands in the repo.
+1. **Draft.** Ask a coding agent to draft the release notes. Following the root `AGENTS.md`, it reads the last tag from `release.txt`, surveys `git log` and `git diff --stat` since that tag, and writes short grouped bullets to `.tmp/release-notes.md`. That folder is gitignored, so nothing half-finished lands in the repo.
+2. **Edit.** Revise the file by hand. Leave out a top-level title, since the release is already named after its version.
+3. **Publish.** Run `npm run release -- <patch|minor|major|none>` from the repository root, adding `--dry-run` to test first. The command is `scripts/utilities/release.mjs`. It requires that you are on `main` and that local `main` matches `origin/main`, because the workflow builds from the remote. It warns about uncommitted changes, shows the next version and the notes, asks for confirmation (`--yes` skips this), and dispatches the workflow through GitHub CLI with the file as `release_notes`. Use `--notes <path>` to send a different file. Follow the run with `gh run watch`.
 
-  ```bash
-  git log <tag>..HEAD --oneline --no-merges
-  git diff --stat <tag>..HEAD
-  ```
-
-- **Publishing.** Once those bullets have been reviewed and edited, commit them as `docs/versions/<version>.md`. That committed file is the finished changelog.
+For a themed release that deserves a page under `docs/versions/`, commit `docs/versions/<version>.md` and push it first, then pass it with `--notes`.
 
 ## Building the installer locally
 
@@ -91,7 +87,7 @@ Separate from release packaging, each TypeScript service publishes a generated T
 ## Checklist for a release
 
 1. Get `main` into the state you want to ship, and confirm the [pre-submit checks](testing.md#before-you-submit) pass. Nothing in CI runs the tests for you.
-2. Draft the notes for the new version and commit them as `docs/versions/<version>.md`.
-3. Run **Release Version** with `dry_run` enabled and the intended `version_type`. Confirm the installer builds and verifies.
-4. Re-run it with `dry_run` off. The workflow bumps the version files, commits, tags, builds, and publishes.
-5. Check the published release: the installer is attached, and the body carries your last commit message. Edit the body if you want the full notes visible there, since the workflow only copies that one message.
+2. Have the notes drafted into `.tmp/release-notes.md` and edit them. For a themed release, also commit them as `docs/versions/<version>.md` and push.
+3. Run `npm run release -- <type> --dry-run`. Confirm that the installer builds and verifies, and that the summary shows your notes.
+4. Run `npm run release -- <type>`. The workflow bumps the version files, commits, tags, builds, and publishes.
+5. Check the published release: the installer is attached, and the body carries your notes.

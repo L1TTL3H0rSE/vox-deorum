@@ -12,6 +12,7 @@ import type { GameMetadata } from "../../../mcp-server/dist/tools/knowledge/get-
 import { StrategyDecisionType } from "../types/config.js";
 import type { HumanDecisionBus } from "./human-decision-bus.js";
 import { cacheBreakpoint } from "../utils/models/cache-breakpoint.js";
+import { dropLeastImportantEvents, maxEventTrimLevel } from "../utils/prompts/event-importance.js";
 
 /**
  * Parameters for the strategist agent
@@ -484,6 +485,10 @@ export function getDecisionEventWindows(fromTurn: number, toTurn: number): Array
  * the window is empty (`eventFromTurn > parameters.turn`), in which case `attempt` is never
  * called and the caller should fall back to whatever it does when no decision is produced.
  *
+ * When even the single-turn window fails, it keeps that turn and drops its least important
+ * events one importance group at a time (see `utils/prompts/event-importance.ts`), passing the
+ * number of dropped groups as `droppedTiers`. Groups that would drop nothing are skipped.
+ *
  * Shared by the strategist decision loop (raw-event strategists) and the briefer
  * (`requestBriefing`), both of which need to shrink an oversized paced event window.
  */
@@ -491,7 +496,7 @@ export async function withEventWindowFallback(
   parameters: StrategistParameters,
   state: GameState,
   eventFromTurn: number,
-  attempt: (window: { fromTurn: number; toTurn: number }) => Promise<boolean>
+  attempt: (window: EventWindow) => Promise<boolean>
 ): Promise<boolean> {
   const windows = getDecisionEventWindows(eventFromTurn, parameters.turn);
 
@@ -500,5 +505,25 @@ export async function withEventWindowFallback(
     if (await attempt(window)) return true;
   }
 
+  const last = windows[windows.length - 1];
+  if (!last) return false;
+  const singleTurn = mergeCachedEvents(parameters, last.fromTurn, last.toTurn);
+  let droppedEvents = 0;
+  for (let level = 1; level <= maxEventTrimLevel; level++) {
+    const trimmed = dropLeastImportantEvents(singleTurn, level);
+    if (trimmed.droppedEvents === droppedEvents) continue;
+    droppedEvents = trimmed.droppedEvents;
+    state.mergedEvents = trimmed.events;
+    if (await attempt({ ...last, droppedTiers: level })) return true;
+  }
+
   return false;
+}
+
+/** One candidate event window for {@link withEventWindowFallback}. */
+export interface EventWindow {
+  fromTurn: number;
+  toTurn: number;
+  /** Importance groups dropped from the window's events, when trimming went past turn narrowing. */
+  droppedTiers?: number;
 }

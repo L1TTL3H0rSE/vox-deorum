@@ -98,6 +98,11 @@ const targetCivName = computed(() => {
   return id === null ? '' : (playerCivs.value[id] ?? '');
 });
 
+/** Observer-chat caller options: every seat except the voiced one, which cannot address itself. */
+const observerPlayerOptions = computed(() =>
+  playerOptions.value.filter(o => o.value !== derivedTargetPlayerID.value)
+);
+
 /** Whether the diplomacy form is complete enough to open a conversation. */
 const canStartDiplomacy = computed(() =>
   derivedTargetPlayerID.value !== null &&
@@ -496,7 +501,7 @@ watch(
         v-model:role="userRole"
         v-model:player="selectedPlayerOption"
         :suggestions="filteredRoles"
-        :playerOptions="playerOptions"
+        :playerOptions="observerPlayerOptions"
         :playersLoading="playersLoading"
         @search-roles="searchRoles"
       />

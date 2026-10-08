@@ -368,3 +368,38 @@ export function makeGameState(
     ...overrides,
   } as GameState;
 }
+
+/** Build an MCP tool definition whose input schema has the given argument descriptions. */
+function toolSchema(name: string, args: Record<string, string>): MCPTool {
+  const properties = Object.fromEntries(Object.entries(args).map(([key, description]) => [key, { type: 'number', description }]));
+  return { name, inputSchema: { type: 'object', properties } } as MCPTool;
+}
+
+/**
+ * Trimmed copies of the MCP action tool schemas the evaluator strategist reads: two persona axes,
+ * the set-flavors scale, and the relationship modifiers, each with the fixed arguments it skips.
+ */
+export function makeStrategistToolSchemas(): MCPTool[] {
+  return [
+    toolSchema('set-persona', {
+      PlayerID: 'ID of the player',
+      Boldness: 'Military risk-taking (1-10)',
+      WarBias: 'Likelihood to declare war (1-10)',
+      Rationale: 'Why',
+      Turn: 'Source turn',
+    }),
+    toolSchema('set-flavors', {
+      PlayerID: 'ID of the player',
+      GrandStrategy: 'The grand strategy name to set',
+      Flavors: 'Flavor values to set: 0 = forbid, 30 = enough, 50 = balanced, 70 = prioritize, 100 = emergency focus.',
+      Rationale: 'Why',
+    }),
+    toolSchema('set-relationship', {
+      PlayerID: 'ID of the player',
+      TargetID: 'ID of the target',
+      Public: 'Visible diplomatic stance (-100 to 100)',
+      Private: 'Hidden feelings/attitudes (-100 to 100)',
+      Rationale: 'Why',
+    }),
+  ];
+}

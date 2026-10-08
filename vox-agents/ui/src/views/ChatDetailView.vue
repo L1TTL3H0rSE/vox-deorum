@@ -58,6 +58,7 @@ Purpose: Main chat interface for interacting with agents
         v-if="thread"
         :messages="visibleMessages"
         :scroll-trigger="newChunkEvent"
+        :empty-hint="emptyHint"
         :user-label="userLabel"
         :agent-label="agentLabel"
         :you-i-d="audiencePlayerID"
@@ -200,6 +201,10 @@ const agentLabel = computed(() => {
   return voicedCiv.value ? `${name} of ${voicedCiv.value}` : name;
 });
 
+/** Canned greeting shown on an empty live thread; the agent itself only speaks once addressed. */
+const emptyHint = computed(() =>
+  thread.value?.contextType === 'live' ? `${agentLabel.value} greets you. Send a message to begin.` : undefined);
+
 /** Open/closed status derived from the latest close message's turn vs the current turn. */
 const isClosed = computed(() => thread.value?.closeTurn !== undefined);
 /** Closed this turn → locked; the conversation can only resume on a later turn (specs §8). */
@@ -321,8 +326,8 @@ const onDealSend = async (
 const loadSession = async () => {
   await refreshConversation();
   if (!thread.value) return;
-  // Auto-greet on empty thread or when last message is from a previous game turn
-  if (shouldRequestGreeting(thread.value, currentTurn.value)) {
+  // Database (telepathist) chats ask the agent to open; live chats show the canned hint instead.
+  if (thread.value.contextType === 'database' && shouldRequestGreeting(thread.value, currentTurn.value)) {
     const cleanup = await requestGreeting();
     if (cleanup) {
       sseCleanup = cleanup;

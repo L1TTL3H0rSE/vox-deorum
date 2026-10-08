@@ -44,6 +44,7 @@ interface SeedRestoreState {
   path: string;
   sync: string;
   map: string;
+  lastCiv?: string;
 }
 
 
@@ -336,6 +337,10 @@ export class VoxCivilization {
    * repairs a LastMapScript that still names the legacy "(1b) Vox Deorum"
    * folder, since an automated start reuses that map script.
    *
+   * A seeded run also sets `LastCiv` to -1 (random). Otherwise the human slot
+   * keeps the civ last picked in the setup screen, which shifts every later
+   * random civ pick and gives a different lineup for the same seed.
+   *
    * A player who never started Civ V has no config.ini. An unseeded run then
    * leaves it alone; a seeded run creates it with just the seed settings.
    */
@@ -358,13 +363,16 @@ export class VoxCivilization {
       this.seedRestoreState = {
         path: configPath,
         sync: original.sync ?? '0',
-        map: original.map ?? '0'
+        map: original.map ?? '0',
+        lastCiv: original.lastCiv
       };
     }
 
+    const seeded = seeds?.sync !== undefined || seeds?.map !== undefined;
     const updated = updateCivConfigLegacyMapScriptContent(updateCivConfigSeedsContent(content, {
       sync: seeds?.sync ?? 0,
-      map: seeds?.map ?? 0
+      map: seeds?.map ?? 0,
+      lastCiv: seeded ? -1 : undefined
     }));
     await writeFile(configPath, updated, 'utf-8');
     logger.info(`Set Civ V random seeds in config.ini (sync=${seeds?.sync ?? 0}, map=${seeds?.map ?? 0})`);
@@ -386,7 +394,8 @@ export class VoxCivilization {
       const content = await readFile(restoreState.path, 'utf-8');
       const restored = updateCivConfigSeedsContent(content, {
         sync: restoreState.sync,
-        map: restoreState.map
+        map: restoreState.map,
+        lastCiv: restoreState.lastCiv
       });
       await writeFile(restoreState.path, restored, 'utf-8');
       logger.info('Restored Civ V random seeds in config.ini');

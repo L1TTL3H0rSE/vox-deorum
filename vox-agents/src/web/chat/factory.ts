@@ -237,6 +237,9 @@ export function createChatThreadFactory(
     }
 
     const source = resolveOrdinaryContextSource(contextId, databasePath);
+    const callerID = callerPlayerID !== undefined && callerPlayerID >= 0
+      ? callerPlayerID
+      : observerID;
     const id = dependencies.createOrdinaryThreadId();
     let gameID = 'unknown';
     let voicedID = 0;
@@ -254,6 +257,11 @@ export function createChatThreadFactory(
       const identifier = parseContextIdentifier(source.contextId);
       gameID = identifier.gameID;
       voicedID = identifier.playerID;
+      // Both endpoints on one seat collapse the pair: the audience would resolve to the voiced civ
+      // itself, so the agent would be told it is speaking to its own spokesperson.
+      if (callerID === voicedID) {
+        throw new ChatOpenError(400, 'A civilization cannot hold a conversation with itself; choose another player or Observer');
+      }
       voicedIdentity = civIdentity(existingContext, voicedID);
     } else {
       // Preflight failures are model-configuration errors (alias cycles, dangling aliases,
@@ -277,9 +285,6 @@ export function createChatThreadFactory(
       }
     }
 
-    const callerID = callerPlayerID !== undefined && callerPlayerID >= 0
-      ? callerPlayerID
-      : observerID;
     const audienceRole = callerRole?.trim() || 'Observer';
     const callerIdentity = sentCallerIdentity
       ?? (callerID >= 0

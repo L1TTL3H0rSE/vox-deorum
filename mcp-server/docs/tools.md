@@ -40,7 +40,7 @@ All extend `DatabaseQueryTool`. Common input: `Search?`: string (fuzzy match), `
 | `get-events` | Recent game events, consolidated by turn with smart grouping | `Turn?`, `Type?`, `After?`, `Before?`, `PlayerID?`, `Original?` |
 | `get-diplomatic-events` | Diplomatic events grouped by turn, including relayed reports. `OtherPlayerID` matches report sources, recipients, and subjects; formatted reports include subject names | `PlayerID`, `OtherPlayerID?`, `FromTurn?`, `ToTurn?`, `Formatted?` |
 | `read-transcript` | Read the durable, append-ID-ordered conversation between two endpoints, optionally filtered by message type or speaker role, with optional older-page cursors | `PlayerAID`, `PlayerBID`, `MessageType?`, `Role?`, `BeforeID?`, `Limit?` |
-| `inspect-deal` | Inspect a draft deal against live game state: per-item and per-promise legality with reasons, advisory values, advisory promise agreeability factors, and each side's tradable range | `PlayerAID`, `PlayerBID`, `ProposedDeal?` |
+| `inspect-deal` | Inspect a draft deal against live game state: per-item and per-promise legality with reasons, advisory values, advisory promise agreeability factors, each side's tradable range, and the pair's war status (`atWar`, `warLockTurns`) | `PlayerAID`, `PlayerBID`, `ProposedDeal?` |
 | `get-players` | Player summary with scores, era, resources, military, and diplomatic opinions | `PlayerID?` (0-21) |
 | `get-opinions` | Diplomatic opinions to/from a player with all alive major civilizations | `PlayerID` (0-21), `RevealAll?` |
 | `get-cities` | City info from a player's perspective with visibility filtering | `PlayerID?` (0-21), `Owner?` |

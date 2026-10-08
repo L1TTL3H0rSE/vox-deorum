@@ -15,6 +15,7 @@ import { SpecializedBriefer } from "../briefer/specialized-briefer.js";
 import { NoneStrategist } from "../strategist/agents/none-strategist.js";
 import { NullStrategist } from "../strategist/agents/null-strategist.js";
 import { HumanStrategist } from "../strategist/agents/human-strategist.js";
+import { EvaluatorStrategist } from "../strategist/agents/evaluator-strategist.js";
 import { Spokesperson } from "../envoy/agents/spokesperson.js";
 import { Diplomat } from "../envoy/agents/diplomat.js";
 import { Negotiator } from "../envoy/agents/negotiator.js";
@@ -127,6 +128,7 @@ class AgentRegistry {
     this.register(new NoneStrategist());
     this.register(new NullStrategist());
     this.register(new HumanStrategist());
+    this.register(new EvaluatorStrategist());
 
     // Register briefer agents
     this.register(new SimpleBriefer());

@@ -103,6 +103,8 @@ The store is append-only and carries no status column, which leads to the rule t
 
 Durations and display names are never author-supplied. They are stamped server-side from a fresh inspection before the row is archived, so a stored deal renders correctly without a live game. `symmetrizeDeal` completes a mutual agreement listed on one side onto both.
 
+When the two civs are at war, every deal between them is a peace deal: `appendDealProposal` (`vox-agents/src/utils/diplomacy/deal/deal.ts`) adds a Peace Treaty on both sides when the author left one out, then re-inspects so the treaty's legality and value are real. While the game's war lock lasts, that inspection reports the treaty illegal with a locked-into-war reason, so the whole proposal is refused before anything is archived.
+
 A proposal row also carries `Value1` and `Value2`: per-item snapshots of what each item was worth to each ordered player at proposal time. These are advisory: the game's own trade valuation gates nothing on the agent path.
 
 **An inspection** is the read-only view of live game state. `inspect-deal` (`mcp-server/src/tools/knowledge/inspect-deal.ts`) returns the full tradable range for each side, per-term legality with reasons, both-direction value estimates, and per-promise agreeability factors, all computed on a scratch deal that is never activated. Nothing about it is stored; it is fetched fresh wherever it is needed.

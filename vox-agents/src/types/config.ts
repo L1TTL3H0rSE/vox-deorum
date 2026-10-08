@@ -68,6 +68,12 @@ export interface LLMConfig {
      * 100,000 otherwise. See `continuityThreshold`.
      */
     continuityThreshold?: number;
+    /**
+     * Largest input the model accepts, in estimated tokens. Evaluation calls refuse a larger state
+     * with a context-length error, and callers trim their state to fit. Defaults to 30,000 for
+     * TypeSafe (under Jev's 32k state cap) and unlimited otherwise. See `inputTokenLimit`.
+     */
+    maxInputTokens?: number;
     /** When set, marks this model as an embedding model; value is the target embedding dimension */
     embeddingSize?: number;
     [key: string]: any;

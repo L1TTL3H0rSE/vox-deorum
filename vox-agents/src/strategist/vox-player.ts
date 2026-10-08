@@ -165,6 +165,22 @@ export class VoxPlayer {
             continue;
           }
 
+          // Pause gate. Stall the game by holding the seat, then wait for the session to resume.
+          // A failed hold is retried on each poll; once it succeeds, the seat is not re-paused.
+          // The pending turn stays queued, so resumption picks it right up (no PlayerDoneTurn
+          // can re-arm it while the seat is held).
+          if (this.context.session?.isPaused()) {
+            let held = false;
+            while (this.context.session.isPaused() && !this.aborted) {
+              if (!held) {
+                held = await this.context.callTool("pause-game", { PlayerID: this.playerID }, this.parameters) === true;
+                if (!held) this.logger.warn(`Failed to hold player ${this.playerID} for the session pause; retrying...`);
+              }
+              await setTimeout(200);
+            }
+            continue;
+          }
+
           // Initializing. turn/before/after are run-local (passed to withRun as overrides), so the
           // context's base strategist parameters are never mutated per turn — concurrent diplomat
           // chats keep their own live turn. `after` starts at the persistent event cursor; the
@@ -177,18 +193,6 @@ export class VoxPlayer {
           // strategist root writes it (a chat root must never).
           this.parameters.lastDecisionTurn = this.lastDecisionTurn;
           this.running = true;
-
-          // Pause gate. Stall the game by getting the strategist infinitely delaying.
-          // The consumed turn is put back on the queue so resumption picks it right up
-          // (no PlayerDoneTurn can re-arm it while the seat is held, and pause-game is
-          // an idempotent set insert, so re-holding on each pass is cheap).
-          if (this.context.session?.isPaused()) {
-            this.pendingTurn = turn;
-            this.running = false;
-            await this.context.callTool("pause-game", { PlayerID: this.playerID }, this.parameters);
-            await setTimeout(200);
-            continue;
-          }
 
           // Start a new trace for each turn (no parent)
           const turnSpan = tracer.startSpan(`strategist.turn.${turn}`, {
@@ -388,9 +392,10 @@ export class VoxPlayer {
   /**
    * Execute a strategist decision, narrowing the event window one turn at a
    * time when the model context is exceeded. Returns true once a decision is
-   * made (including the no-op "none" strategist). If even the current turn alone
-   * is too large, returns false so the caller can retry next turn instead of
-   * recording a completed decision.
+   * made (including the no-op "none" strategist). If the current turn alone is
+   * still too large, drops its least important events one group at a time. If
+   * even its most important events are too large, returns false so the caller
+   * can retry next turn instead of recording a completed decision.
    */
   private async executeDecisionWithEventFallback(
     parameters: StrategistParameters,
@@ -401,7 +406,8 @@ export class VoxPlayer {
     const decided = await withEventWindowFallback(parameters, state, eventFromTurn, async (eventWindow) => {
       turnSpan.setAttributes({
         event_from: eventWindow.fromTurn,
-        event_to: eventWindow.toTurn
+        event_to: eventWindow.toTurn,
+        event_dropped_tiers: eventWindow.droppedTiers ?? 0
       });
 
       // Nested execution inside the established turn root: execute() uses the root's composed
@@ -414,12 +420,13 @@ export class VoxPlayer {
       if (!contextLengthExceeded) return true;
 
       this.logger.warn(
-        `Context length exceeded on turn ${parameters.turn}; retrying with a narrower event window.`,
+        `Context length exceeded on turn ${parameters.turn}; retrying with fewer events.`,
         {
           GameID: parameters.gameID,
           PlayerID: parameters.playerID,
           EventFrom: eventWindow.fromTurn,
-          EventTo: eventWindow.toTurn
+          EventTo: eventWindow.toTurn,
+          DroppedTiers: eventWindow.droppedTiers ?? 0
         }
       );
       return false;

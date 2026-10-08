@@ -79,17 +79,6 @@ describe('Diplomat.triage', () => {
     }
   });
 
-  it('should choose the small tier for greeting mode without evaluating', async () => {
-    const ctx = triageContext(enabledAssignment);
-
-    await expect(diplomat.triage?.({}, thread('{{{Greeting}}}'), ctx, prepared)).resolves.toEqual({
-      tier: 'small',
-      source: 'shortcut',
-      note: 'special message',
-    });
-    expect(ctx.evaluate).not.toHaveBeenCalled();
-  });
-
   it.each([
     ['small talk', 3, 'small'],
     ['deal', 2, 'large'],

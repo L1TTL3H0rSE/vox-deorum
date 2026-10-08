@@ -4,16 +4,14 @@
  * hazard of importing the abstract module directly). LiveEnvoy's lifecycle hooks are public
  * or protected; we reach them through a loosely-typed handle (as in diplomat-prompts.test.ts).
  *
- * Covered: getInitialMessages (shared game context, special-message filtering, normal-mode
- * hint append, special-mode prompt append by reference), getRunTools (restricts tools in special
- * mode), and getExtraTools (exposes get-briefing). Identity/context derive from the typed
+ * Covered: getInitialMessages (shared game context, hint append), getRunTools (full tool list,
+ * plus bash with files on), and getExtraTools (exposes get-briefing). Identity/context derive from the typed
  * parameters; buildGameContextMessages requires a seeded game state near parameters.turn.
  */
 
 import { describe, it, expect } from 'vitest';
 import { agentRegistry } from '../../../src/infra/agent-registry.js';
 import type { EnvoyThread, MessageWithMetadata } from '../../../src/types/index.js';
-import { specialMessages } from '../../../src/envoy/envoy.js';
 import { speakerLabel } from '../../../src/utils/diplomacy/transcript/transcript-utils.js';
 import { buildGameContextMessages } from '../../../src/strategist/strategy-parameters.js';
 import { createFakeVoxContext } from '../../helpers/fake-vox-context.js';
@@ -46,11 +44,6 @@ function textMessage(content: string): MessageWithMetadata {
   return { message: { role: 'user', content }, metadata: { datetime: new Date(0), turn: 5 } };
 }
 
-/** The {{{Greeting}}} special trigger message. */
-function greetingMessage(): MessageWithMetadata {
-  return { message: { role: 'user', content: '{{{Greeting}}}' }, metadata: { datetime: new Date(0), turn: 5 } };
-}
-
 /**
  * Parameters with a seeded game state near turn 5, so buildGameContextMessages (used by the
  * shared game context) has a state to render and does not throw.
@@ -73,7 +66,7 @@ function liveParams(overrides: Record<string, unknown> = {}) {
 }
 
 describe('LiveEnvoy.getInitialMessages', () => {
-  it('uses the shared game context and appends the hint in normal mode', async () => {
+  it('uses the shared game context and appends the hint', async () => {
     const params = liveParams();
     const input = thread({ messages: [textMessage('What are your intentions?')] });
     const ctx = createFakeVoxContext().asContext();
@@ -95,43 +88,6 @@ describe('LiveEnvoy.getInitialMessages', () => {
     const joined = messages.map((m: any) => (typeof m.content === 'string' ? m.content : '')).join('\n');
     expect(joined).toContain('What are your intentions?');
   });
-
-  it('filters special-message tokens out of normal transcript history', async () => {
-    const params = liveParams();
-    const input = thread({
-      messages: [
-        greetingMessage(), // a prior special token in history
-        textMessage('Real question here'),
-      ],
-    });
-    const ctx = createFakeVoxContext().asContext();
-
-    const messages = await spokesperson.getInitialMessages(params, input, ctx);
-    const joined = messages.map((m: any) => (typeof m.content === 'string' ? m.content : '')).join('\n');
-
-    // The special token must not leak into the model context as a visible turn.
-    expect(joined).not.toContain('{{{Greeting}}}');
-    expect(joined).toContain('Real question here');
-  });
-
-  it('appends the greeting special prompt BY REFERENCE in special mode', async () => {
-    const params = liveParams();
-    const input = thread({ messages: [textMessage('earlier'), greetingMessage()] });
-    const ctx = createFakeVoxContext().asContext();
-
-    const messages = await spokesperson.getInitialMessages(params, input, ctx);
-    const last = messages[messages.length - 1];
-
-    // The hint + special add-on are delivered as a single system (operator) message.
-    expect(last.role).toBe('system');
-    // The exact prompt string comes from the shared greeting config, included verbatim.
-    expect(last.content).toContain(specialMessages['{{{Greeting}}}']);
-
-    // The hint is now always present, even in special mode — followed by the greeting prompt.
-    expect(last.content).toContain(spokesperson.getHint(params, input));
-    expect(last.content).not.toBe(spokesperson.getHint(params, input));
-  });
-
 });
 
 describe('LiveEnvoy.getInitialMessages past/ongoing split (cache-aware record)', () => {
@@ -186,26 +142,6 @@ describe('LiveEnvoy.getInitialMessages past/ongoing split (cache-aware record)',
     const joined = messages.map((m: any) => (typeof m.content === 'string' ? m.content : '')).join('\n');
     expect(joined).toContain('[Turn 5] Rome, the leader: hello there');
   });
-
-  it('filters special tokens on both sides of the split without misaligning the boundary', async () => {
-    const params = liveParams();
-    const input = thread({
-      pastMessageID: 1,
-      messages: [
-        hydrated(1, 'user', 'old line', 3),
-        greetingMessage(), // live-pushed trigger: no id → ongoing; filtered from the prompt
-        { message: { role: 'user', content: 'real question' }, metadata: { datetime: new Date(0), turn: 5 } },
-      ],
-    });
-    const ctx = createFakeVoxContext().asContext();
-
-    const messages = await spokesperson.getInitialMessages(params, input, ctx);
-    const joined = JSON.stringify(messages);
-    expect(joined).not.toContain('{{{Greeting}}}');
-    const past = messages.find((m: any) => typeof m.content === 'string' && m.content.startsWith('The conversation so far'));
-    expect(past.content).toContain('old line');
-    expect(joined).toContain('real question');
-  });
 });
 
 describe('speakerLabel', () => {
@@ -225,17 +161,7 @@ describe('speakerLabel', () => {
 });
 
 describe('LiveEnvoy.getRunTools', () => {
-  it('declares only send-message for a special (greeting) run', async () => {
-    const params = liveParams();
-    const input = thread({ messages: [greetingMessage()] });
-    const ctx = createFakeVoxContext().asContext();
-
-    // With the tool force honored on the deployed model an empty set would be uncompliable; the
-    // greeting speaks through send-message like any other reply.
-    expect(await spokesperson.getRunTools(params, input, ctx)).toEqual(['send-message']);
-  });
-
-  it('declares the full tool list in normal mode', async () => {
+  it('declares the full tool list', async () => {
     const params = liveParams();
     const input = thread({ messages: [textMessage('hello')] });
     const ctx = createFakeVoxContext().asContext();
@@ -243,23 +169,12 @@ describe('LiveEnvoy.getRunTools', () => {
     expect(await spokesperson.getRunTools(params, input, ctx)).toEqual(spokesperson.getActiveTools(params));
   });
 
-  it('applies the special-mode restriction to subclasses with their own tool list', async () => {
-    const diplomat = agentRegistry.get('diplomat') as any;
-    const params = liveParams();
-    const ctx = createFakeVoxContext().asContext();
-
-    expect(await diplomat.getRunTools(params, thread({ messages: [greetingMessage()] }), ctx)).toEqual(['send-message']);
-    expect(await diplomat.getRunTools(params, thread({ messages: [textMessage('hello')] }), ctx))
-      .toEqual(diplomat.getActiveTools(params));
-  });
-
-  it('leaves bash out of a greeting run but adds it in normal mode when files are on', async () => {
+  it('adds bash to the full tool list when files are on', async () => {
     const params = liveParams();
     const fake = createFakeVoxContext();
     fake.tools[bashToolName] = {} as any;
     const ctx = fake.asContext();
 
-    expect(await spokesperson.getRunTools(params, thread({ messages: [greetingMessage()] }), ctx)).toEqual(['send-message']);
     expect(await spokesperson.getRunTools(params, thread({ messages: [textMessage('hello')] }), ctx))
       .toEqual([...spokesperson.getActiveTools(params), bashToolName]);
   });

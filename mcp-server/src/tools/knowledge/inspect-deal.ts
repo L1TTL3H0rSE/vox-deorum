@@ -152,6 +152,8 @@ const InspectDealOutputSchema = z.object({
   borderPromiseDuration: z.number().optional().describe("Border promise binding window in turns (Game.GetBorderPromiseDuration)"),
   coopWarPromiseDuration: z.number().optional().describe("Coop War preparation countdown in turns before the war auto-declares (COOP_WAR_SOON_COUNTER)"),
   promiseTargets: z.array(PromiseTargetSchema).optional().describe("Eligible third-party promise targets with display names and major/minor kind"),
+  atWar: z.boolean().optional().describe("True when the two players are at war; a Peace Treaty is then added to every proposed deal"),
+  warLockTurns: z.number().optional().describe("Turns peace stays locked out between the pair (war lock); 0 when not locked"),
 });
 
 // ============================================================================
@@ -266,6 +268,10 @@ export interface InspectDealResponse {
   /** Coop War preparation countdown in turns before the joint war auto-declares. */
   coopWarPromiseDuration?: number;
   promiseTargets?: PromiseTargetInfo[];
+  /** True when the two players are at war; every deal between them is then a peace deal. */
+  atWar?: boolean;
+  /** Turns peace stays locked out between the pair; 0 when not locked. */
+  warLockTurns?: number;
 }
 
 /**
@@ -467,6 +473,8 @@ class InspectDealTool extends ToolBase {
       // Coerce: an empty Lua table arrives as {} (not []) over the bridge and would fail
       // the z.array output schema; asArray normalizes it (and undefined) to [].
       promiseTargets: asArray<PromiseTargetInfo>(inspection.promiseTargets),
+      atWar: inspection.atWar,
+      warLockTurns: inspection.warLockTurns,
     };
   }
 

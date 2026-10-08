@@ -22,7 +22,7 @@ import { createLogger } from "../utils/logger.js";
 const logger = createLogger("live-envoy");
 
 /**
- * Agent-specific context a live envoy layers around the chat record in normal mode. `preamble`
+ * Agent-specific context a live envoy layers around the chat record. `preamble`
  * messages sit BEFORE the chat record (grounding the transcript); `postscript` messages sit AFTER it
  * but before the always-last hint; `dealRenderer` expands deal transcript rows inline within the chat
  * record (or is omitted to leave their stored one-line Content). All fields are optional; base live
@@ -37,8 +37,7 @@ export interface LiveEnvoyContext {
 
 /**
  * Envoy specialized for live game sessions with StrategistParameters.
- * Handles special message detection (e.g., {{{Greeting}}}) and assembles
- * game context for conversations. Provides a get-briefing tool for
+ * Assembles game context for conversations. Provides a get-briefing tool for
  * on-demand briefing retrieval and generation.
  *
  * @abstract
@@ -78,48 +77,42 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
   public override maxSteps: number = 10;
 
   /**
-   * Orchestrates initial messages with special message support. The always-present hint anchors
-   * identity/audience/turn and is ALWAYS the final message for a live envoy — the last thing the model
-   * reads before it acts — in both modes; an add-on follows it — the special message's prompt in
-   * special mode, or the agent's default nudge in normal mode. In normal mode the agent's grounding
-   * brackets the conversation and its deal rows render inline — both assembled together by
-   * {@link getExtraContext}. Special mode skips history (and restricts tools via getRunTools).
+   * Orchestrates initial messages. The always-present hint anchors identity, audience and turn, and
+   * is ALWAYS the final message for a live envoy, the last thing the model reads before it acts,
+   * followed by the agent's default nudge. The agent's grounding brackets the conversation and its
+   * deal rows render inline, both assembled together by {@link getExtraContext}.
    */
   public async getInitialMessages(
     parameters: StrategistParameters,
     input: EnvoyThread,
     context: VoxContext<StrategistParameters>
   ): Promise<ModelMessage[]> {
-    const specialConfig = this.findLastSpecialMessage(input);
     const messages = this.getContextMessages(parameters, input);
-    const addon = specialConfig ?? this.getDefaultAddon(parameters, input);
 
-    if (!specialConfig) {
-      // Normal mode: layer the agent's grounding around the chat record (see {@link LiveEnvoyContext}
-      // for the bracket ordering and rationale) — `preamble` before it, `dealRenderer` inline within
-      // it, `postscript` after it but still before the always-last hint.
-      const extra = await this.getExtraContext(parameters, input, context);
-      if (extra.preamble?.length) messages.push(...extra.preamble);
+    // Layer the agent's grounding around the chat record (see {@link LiveEnvoyContext}
+    // for the bracket ordering and rationale) — `preamble` before it, `dealRenderer` inline within
+    // it, `postscript` after it but still before the always-last hint.
+    const extra = await this.getExtraContext(parameters, input, context);
+    if (extra.preamble?.length) messages.push(...extra.preamble);
 
-      // The chat record splits at the thread's open mark: settled past conversations compile into
-      // ONE byte-stable block (a static prompt-cache anchor), while the ongoing exchange stays
-      // native assistant/user messages (reasoning trail included) so the model keeps its context.
-      // The last ongoing message carries the last static anchor; because each exchange only appends
-      // committed rows, the next run at the same turn re-reads the whole record from cache. (See the
-      // breakpoint strategy note in envoy.ts.)
-      const { past, ongoing } = this.splitThreadMessages(input);
-      const pastBlock = this.formatPastConversations(past, input, extra.dealRenderer);
-      if (pastBlock) {
-        messages.push({ role: "user", content: pastBlock, providerOptions: { ...cacheBreakpoint } });
-      }
-      const ongoingMessages = this.convertToModelMessages(ongoing, extra.dealRenderer, input);
-      markBreakpointOnLast(ongoingMessages); // rides the last ongoing row; no-op when there are none
-      messages.push(...ongoingMessages);
-      if (extra.postscript?.length) messages.push(...extra.postscript);
+    // The chat record splits at the thread's open mark: settled past conversations compile into
+    // ONE byte-stable block (a static prompt-cache anchor), while the ongoing exchange stays
+    // native assistant/user messages (reasoning trail included) so the model keeps its context.
+    // The last ongoing message carries the last static anchor; because each exchange only appends
+    // committed rows, the next run at the same turn re-reads the whole record from cache. (See the
+    // breakpoint strategy note in envoy.ts.)
+    const { past, ongoing } = this.splitThreadMessages(input);
+    const pastBlock = this.formatPastConversations(past, input, extra.dealRenderer);
+    if (pastBlock) {
+      messages.push({ role: "user", content: pastBlock, providerOptions: { ...cacheBreakpoint } });
     }
+    const ongoingMessages = this.convertToModelMessages(ongoing, extra.dealRenderer, input);
+    markBreakpointOnLast(ongoingMessages); // rides the last ongoing row; no-op when there are none
+    messages.push(...ongoingMessages);
+    if (extra.postscript?.length) messages.push(...extra.postscript);
     messages.push({
       role: "system",
-      content: `${this.getHint(parameters, input)} ${addon}`.trim()
+      content: `${this.getHint(parameters, input)} ${this.getDefaultAddon(parameters, input)}`.trim()
     });
 
     // The Anthropic prompt cache rejects a request carrying more than MAX_CACHE_BREAKPOINTS
@@ -137,8 +130,8 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
   }
 
   /**
-   * Agent-specific context a live envoy layers around the chat record, assembled once per turn in
-   * normal mode (see {@link LiveEnvoyContext} for the layout and the single-source rationale). Base
+   * Agent-specific context a live envoy layers around the chat record, assembled once per turn
+   * (see {@link LiveEnvoyContext} for the layout and the single-source rationale). Base
    * live envoys add nothing; a subclass (the diplomat) overrides this to ground the turn with its
    * game state.
    */
@@ -240,22 +233,6 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
     return this.toolChoice !== "required" && allSteps.some(step => Boolean(step.text?.trim()));
   }
 
-  /**
-   * Restricts a special message run (e.g., a greeting) to the send-message tool only. With the tool
-   * force honored on the deployed model an empty tool set would be uncompliable, so the greeting is
-   * itself a send-message call streamed back as text — one path for all spoken output. Resolved for
-   * the whole run, so the model is only ever shown the tool it may use; bash is left out even with
-   * files on.
-   */
-  public override async getRunTools(
-    parameters: StrategistParameters,
-    input: EnvoyThread,
-    context: VoxContext<StrategistParameters>
-  ): Promise<string[] | undefined> {
-    if (this.isSpecialMode(input)) return ["send-message"];
-    return super.getRunTools(parameters, input, context);
-  }
-
   // Game context assembly
 
   /**
@@ -268,7 +245,7 @@ export abstract class LiveEnvoy extends Envoy<StrategistParameters> {
 
   /**
    * Returns the always-present hint that anchors the LLM on its identity, audience, and
-   * current turn. Present in both normal and special message mode, followed by an add-on.
+   * current turn, followed by the agent's default nudge.
    */
   protected getHint(parameters: StrategistParameters, input: EnvoyThread): string {
     const { name: civName, leader } = this.getSelfIdentity(input);

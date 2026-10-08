@@ -2,7 +2,7 @@
   <div class="chat-messages-container">
     <div v-if="messages.length === 0" class="empty-state">
       <i class="pi pi-comments" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5"></i>
-      <p>No messages yet. Start a conversation!</p>
+      <p>{{ emptyHint }}</p>
     </div>
 
     <VList
@@ -53,6 +53,8 @@ interface Props {
   /** Rendered stream items: ordinary chat messages plus inline deal cards (a row's `deal`). */
   messages: MessageWithMetadata[];
   scrollTrigger?: number;
+  /** Line shown in place of the stream while the thread is still empty. */
+  emptyHint?: string;
   userLabel: string;
   agentLabel: string;
   /** Deal-card context: the viewer ("you") and the voiced ("them") endpoint IDs. */
@@ -68,7 +70,8 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  scrollTrigger: 0
+  scrollTrigger: 0,
+  emptyHint: 'No messages yet. Start a conversation!'
 });
 
 defineEmits<{

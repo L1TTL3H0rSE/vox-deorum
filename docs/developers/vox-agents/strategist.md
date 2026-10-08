@@ -51,7 +51,7 @@ Each processed turn runs inside its own [root run](overview.md) carrying that tu
 
 The events the strategist sees are windowed by a rolling cursor, so skipped turns fold their events into the next decision rather than being lost. The per-turn `events` slice fetched by each refresh stays immutable.
 
-When a decision spans several turns, an event-window fallback assembles a derived `mergedEvents` window that strategists and briefers read in preference to the raw slice. If the accumulated context still overflows the model's window, the fallback narrows that window one turn at a time and retries.
+When a decision spans several turns, an event-window fallback (`withEventWindowFallback` in `src/strategist/strategy-parameters.ts`, shared by the player loop and briefers) assembles a derived `mergedEvents` window that strategists and briefers read in preference to the raw slice. If the accumulated context still overflows the model's window, the fallback narrows that window one turn at a time and retries. When even the single current turn overflows, it keeps that turn and drops its events by importance: `src/utils/prompts/event-importance.ts` groups event types into tiers, from turning points (war, peace, captures, deals, messages) down to noise (tiles, unit movement, system events). Unlisted types count as noise, so trimming drops the noise tier first, then one tier at a time from the least important, and never the top tier. The [evaluator strategist](evaluators.md#what-it-reads) does not wait for an overflow: it trims its events by these same tiers up front.
 
 ### Persistent state and decision modes
 
@@ -79,6 +79,7 @@ All strategists extend the `Strategist` base class (`src/strategist/strategist.t
 | `simple-strategist-briefed` | Inserts a [briefing](support-agents.md) stage: a briefer condenses the raw reports into a strategic summary first, keeping the strategist's context small when event history is long. |
 | `simple-strategist-staffed` | Runs three specialized briefers (military, economy, diplomacy) in parallel and assembles their reports. The most thorough analysis, at the highest token cost. Falls back to the simple briefer when there is little to summarize. |
 | `simple-strategist-learned` | Extends the staffed variant with retrieval: a `find-episodes` tool lets the model ask for similar situations from past games, answered from the [archivist's](archivist.md) episode database and injected into the next turn's context. |
+| `evaluator-strategist` | Plays the seat with one evaluation call per decision instead of a chat loop, in Flavor mode only. Not offered in setup. See [Evaluators](evaluators.md#evaluator-strategist). |
 | `human-strategist` | Puts a person in a strategist seat instead of a model. See below. |
 
 **`simple-strategist`** receives the formatted game state (players, cities, military, victory progress, events, and the option landscape from `get-options`) and makes a decision directly. It finishes with `set-strategy` (or `set-flavors` in Flavor mode) or `keep-status-quo`, plus research, policy, persona, and relationship adjustments along the way.
