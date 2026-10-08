@@ -21,11 +21,13 @@ Those time annotations let replies be prefixed with `[Turn N]` markers and let t
 
 ### Special messages
 
-Envoys also understand **special messages**: triple-brace tokens like `{{{Greeting}}}` that the UI sends instead of user text to trigger a behavior, typically "introduce yourself in one sentence" when a chat is first opened. Each envoy declares which special messages it supports via `getSpecialMessages()`, and tools are disabled while one is being handled. The same mechanism drives the [telepathist's](telepathist.md) `{{{Initialize}}}` bootstrapping, since telepathists are envoys too.
+Envoys can also understand **special messages**: triple-brace tokens like `{{{Initialize}}}` that the UI sends instead of user text to trigger a behavior. Each envoy declares which special messages it supports via `getSpecialMessages()`, and the base envoy supports none. Only the [telepathist](telepathist.md) uses them, for its `{{{Initialize}}}` bootstrapping and its opening greeting. Live envoys never greet on their own: an empty live chat shows a canned greeting line in the UI, and the agent first speaks when addressed.
 
 ## LiveEnvoy: chatting inside a running game
 
 `LiveEnvoy` (`src/envoy/live-envoy.ts`) binds an envoy to a live strategist session. Each chat opens its own [root run](overview.md) over the seat's base parameters at the session's live turn. The envoy therefore reasons about the current turn even when the strategist is still finishing an older queued turn, and it reuses the seat's cached game state and metadata without disturbing the strategist's run.
+
+A live envoy run that ends without speaking streams a short "could you say that again?" line instead of silence, in observer chats as well as diplomacy. An observer chat cannot name the voiced civilization itself as the caller.
 
 It opens the conversation with the civilization's identity, the players it knows, and its current strategy. It exposes a `get-briefing` tool so the envoy can pull fresh military, economic, or diplomatic [briefings](support-agents.md) on demand instead of carrying the whole game state in context. Subclasses supply a `getHint()`, a standing reminder of who they are and who they are talking to.
 
@@ -53,8 +55,7 @@ The distinction to keep in mind (and in any UI copy): **talk to a spokesperson t
 
 The diplomat can also pick its own model tier each turn (triage). To turn this on, set `"triage": ["diplomat"]` (or `true`) on a seat, in the session config, or in `vox-agents/config.json`, and configure `diplomat.evaluator` or the shared `evaluator` alias; otherwise the usual assignment applies.
 
-- Greetings and other special messages go straight to `small`, with no evaluation.
-- Other turns ask the evaluator to rate intent and stakes using the last eight spoken rows. If a proposal is open, it also receives the full deal context, including possible items. It does not receive the system prompt or turn hint. Small talk uses `small`, high-stakes deals and threats use `large`, and everything else uses `default`.
+- Each turn asks the evaluator to rate intent and stakes using the last eight spoken rows. If a proposal is open, it also receives the full deal context, including possible items. It does not receive the system prompt or turn hint. Small talk uses `small`, high-stakes deals and threats use `large`, and everything else uses `default`.
 
 The questions and routing live in `src/envoy/agents/diplomat.ts`. See [Models and configuration](overview.md#models-and-configuration) for tier lookup and the shared `createTriage` helper.
 

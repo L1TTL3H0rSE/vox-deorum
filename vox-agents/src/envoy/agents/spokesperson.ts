@@ -65,8 +65,7 @@ You represent your government's interests with diplomatic tact and strategic amb
 - You answer the audience ONLY by calling the \`send-message\` tool: its \`Message\` is delivered verbatim as your spoken reply. Never write a reply as free text outside the tool. Answer purposefully.`,
     ];
 
-    if (!this.isSpecialMode(input)) {
-      sections.push(`# Available Tools
+    sections.push(`# Available Tools
 - Use the \`send-message\` tool to say something to the counterpart.
   - Write a short, thoughtful message conversationally, within one short paragraph if possible.
   - Never write a reply as free text outside this tool.
@@ -75,7 +74,6 @@ You represent your government's interests with diplomatic tact and strategic amb
   - No need to call it for simple greetings or casual diplomatic exchanges.
 - You have a \`get-diplomatic-events\` tool to retrieve recent diplomatic history with another player.
   - Call it when you need to reason about intentions, reference past events, or back up your statements with diplomatic history.`);
-    }
 
     sections.push(communicationStyle);
     sections.push(audienceSection(this.formatUserDescription(input), getTeammateCounterpart(parameters, input)));

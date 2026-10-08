@@ -118,7 +118,7 @@ model reply: [ get-briefing(...), send-message(...) ]
 - `buildRemovedToolRejections` (`utils/tools/tool-availability.ts`) builds one rejection hook per removed tool, passed to the AI SDK as `experimental_refineToolInput`. Only removed tools get a hook, so allowed calls take the normal path. The SDK handles each call separately, so a rejected call never blocks the others in the same reply.
 - Oracle's batch mode never runs the SDK. `convertToStepResult` (`oracle/batch/format-converter.ts`) applies the same hooks while converting a batch response, so a rejected call comes back invalid with the same error result.
 - The tool choice (`required` or `auto`) follows the executable list, so a step that may run nothing is never forced to call a tool. The closing reminder says when a call is required.
-- Tools are only ever removed mid-run, never added. A restriction that is known before the first step belongs in `getRunTools()`, so the model is only shown what it may use. Current cases: a live envoy answering a special message such as a greeting declares only `send-message` (`envoy/live-envoy.ts`), and a telepathist in special mode declares no tools (`telepathist/telepathist.ts`). Neither gets `bash`, even with files on.
+- Tools are only ever removed mid-run, never added. A restriction that is known before the first step belongs in `getRunTools()`, so the model is only shown what it may use. Current case: a telepathist in special mode declares no tools (`telepathist/telepathist.ts`), so it does not get `bash` even with files on.
 - `prepareStep()` removes tools only after an earlier step ran. No agent does this today. Telemetry and Oracle depend on this assumption: the first step always runs the full declared list (see [Telemetry and replay](#telemetry-and-replay)).
 
 ## Reminders
@@ -231,7 +231,7 @@ Claude Code flattens the whole prompt into one CLI user message per step, so it 
 | Opening game context | That agent's `getInitialMessages()` | Shared envoy and analyst context: `buildGameContextMessages` in `strategist/strategy-parameters.ts`. |
 | Envoy hint (identity, audience, turn) | `getHint` in `envoy/live-envoy.ts`, overridden in `telepathist/talkative-telepathist.ts` | Always the last opening message for a live envoy. |
 | Envoy add-on after the hint | `getDefaultAddon` in `envoy/envoy.ts`, overridden in `envoy/agents/diplomat.ts` and `envoy/agents/spokesperson.ts` | |
-| Special messages (such as the greeting) | `specialMessages` in `envoy/envoy.ts` | A special message also limits the run's tools to `send-message` (`getRunTools` in `envoy/live-envoy.ts`). |
+| Special messages (telepathist only) | `getSpecialMessages` in `telepathist/talkative-telepathist.ts` | A special message also removes the run's tools (`getRunTools` in `telepathist/telepathist.ts`). |
 | Which tools an agent has | That agent's `getActiveTools()` | Adding a tool here changes every request's prefix. |
 | Limiting tools for a whole run | That agent's `getRunTools()` | Decided from the run's input before the first step. The model sees only these tools. |
 | Removing tools mid-run | That agent's `prepareStep()`, setting `activeTools` | Only after an earlier step ran, and only removing. The removed tools stay declared, and the policy sentence is added automatically. |

@@ -332,9 +332,17 @@ export async function runChatTurn(
         return;
       }
 
+      // A run that spoke nothing would otherwise look like the agent ignoring the message.
       const replySlice = thread.messages.slice(replyStart);
-      if (thread.diplomacy && needsRetryReply(replySlice)) {
+      if ((thread.diplomacy || speaksOnlyViaSendMessage) && needsRetryReply(replySlice)) {
         emitSpoken(sink, retryMessage, 'retry');
+        // An ordinary chat has no store to archive the stand-in, so its cache row is the record.
+        if (!thread.diplomacy) {
+          thread.messages.push({
+            message: { role: 'assistant', content: retryMessage },
+            metadata: { datetime: new Date(), turn: currentTurn },
+          });
+        }
       }
 
       // A valid send-message call already appended its own text row. Completion clears transient

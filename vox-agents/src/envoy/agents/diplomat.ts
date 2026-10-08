@@ -18,7 +18,7 @@ import { buildDealContextMessage, renderDealRowInline, type DiplomatDealContext 
 import { buildDiplomacyBackgroundMessage, getTeammateCounterpart } from "../context/diplomacy-context.js";
 import { readActiveProposal } from "../../utils/diplomacy/deal/deal.js";
 import { terminalActionTools, type DealRowRenderer } from "../../utils/diplomacy/transcript/transcript-utils.js";
-import { createTriage, TriageShortcut } from "../../infra/triage.js";
+import { createTriage } from "../../infra/triage.js";
 import type { TriageDecision } from "../../infra/vox-agent.js";
 
 /** How many recent spoken rows of the conversation diplomat triage reads. */
@@ -65,8 +65,7 @@ export class Diplomat extends LiveEnvoy {
   /**
    * Select a model tier from the recent exchange when triage is enabled. The evaluator reads the last
    * few spoken rows (see {@link triageMessageCount}) and, only while a deal is open, the full deal
-   * context, including possible items. Special messages such as greetings run without tools or
-   * history, so they take the small tier directly.
+   * context, including possible items.
    */
   public override triage = createTriage<StrategistParameters, EnvoyThread, typeof diplomatTriageQuestions>({
     questions: diplomatTriageQuestions,
@@ -78,9 +77,6 @@ export class Diplomat extends LiveEnvoy {
         ...(deal.openProposalID !== undefined && { dealContext: deal.text }),
       };
     },
-    shortcut: (_parameters, input) => this.isSpecialMode(input)
-      ? new TriageShortcut({ tier: "small", note: "special message" })
-      : undefined,
   });
 
   /** The analyst runs after diplomatic reports are submitted. */
@@ -172,7 +168,6 @@ export class Diplomat extends LiveEnvoy {
    * block and the renderer's open-proposal pointer both derive from that single reduction, and the pointer
    * keys off the block actually being emitted, so they can never disagree about which proposal is open.
    * (Reducing the in-memory `input.messages` instead risked pointing at a block that was never emitted.)
-   * Called by the base only in normal mode, so greeting (special) mode adds none of this.
    */
   protected override async getExtraContext(
     parameters: StrategistParameters,
@@ -242,8 +237,7 @@ You represent your government's interests and gather intelligence through diplom
 - You always use the correct tool-calling format for each tool provided in the prompt. Double check that before sending out.`,
     ];
 
-    if (!this.isSpecialMode(input)) {
-      sections.push(`# Your Resources
+    sections.push(`# Your Resources
 - Use the \`send-message\` tool to say something to the counterpart.
   - Write a short, thoughtful message conversationally, within one short paragraph if possible.
   - Never write a reply as free text outside this tool.
@@ -262,12 +256,11 @@ You represent your government's interests and gather intelligence through diplom
   - Set its optional \`Tier\` to \`large\` for complex and high-stakes proposals.
   - If your proposal is currently on the table, await the counterpart's reply rather than calling the negotiator again.
   - When a deal authored by the counterpart is on the table, either hand it to the negotiator with \`call-negotiator\` or reply with \`send-message\`: do not leave it unanswered.`);
-    }
 
     sections.push(communicationStyle);
     const teammate = getTeammateCounterpart(parameters, input);
     sections.push(audienceSection(this.formatUserDescription(input), teammate));
-    if (teammate && !this.isSpecialMode(input)) sections.push(diplomatTeammateReporting);
+    if (teammate) sections.push(diplomatTeammateReporting);
 
     return sections.join('\n\n').trim();
   }

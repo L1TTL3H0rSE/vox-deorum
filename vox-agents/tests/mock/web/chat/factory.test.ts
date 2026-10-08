@@ -154,6 +154,20 @@ describe('chat thread factory', () => {
       expect(createTelepathistContext).not.toHaveBeenCalled();
     });
 
+    it('should reject an observer chat whose caller is the voiced seat itself', async () => {
+      const { dependencies, threads } = createDependencies({ getContext: () => fakeContext() });
+      const factory = createChatThreadFactory(dependencies);
+
+      await expect(factory.openOrdinaryChat({
+        agentName: 'spokesperson',
+        contextId: 'game-1-player-2',
+        callerPlayerID: 2,
+        callerRole: 'ghost writer',
+        callerIdentity: { name: 'India', leader: 'Gandhi' },
+      })).rejects.toMatchObject({ status: 400 });
+      expect(threads.size).toBe(0);
+    });
+
     it('should give each database thread its own context instance', async () => {
       const threadIds = ['ordinary-a', 'ordinary-b'];
       const createTelepathistContext = vi.fn(async (_databasePath: string, threadId: string) => ({

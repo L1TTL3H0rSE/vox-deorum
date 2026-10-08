@@ -51,15 +51,6 @@ function cloneModelMessage(message: ModelMessage): ModelMessage {
 }
 
 /**
- * Default special messages shared by all envoy agents. Maps a triple-brace-enclosed
- * token (e.g., "{{{Greeting}}}") to the instruction prompt that becomes the hint add-on
- * when that token is the last message. Override `getSpecialMessages` to extend or replace.
- */
-export const specialMessages: Record<string, string> = {
-  "{{{Greeting}}}": "Send a one-sentence greeting appropriate to your diplomatic relationship, adjusting tone to the situation. Use the `send-message` tool.",
-};
-
-/**
  * The stand-in name for an audience seat the thread carries no civ identity for.
  *
  * A conversation is only ever opened by the human caller, and the observer paths deliberately carry
@@ -162,12 +153,13 @@ export abstract class Envoy<TParameters extends AgentParameters = AgentParameter
   // Special messages
   /**
    * Returns the map of special message tokens to their instruction prompts.
-   * Special messages are triple-brace-enclosed tokens (e.g., "{{{Greeting}}}") that
+   * Special messages are triple-brace-enclosed tokens (e.g., "{{{Initialize}}}") that
    * trigger specific agent behavior without appearing as user messages.
-   * Defaults to the shared greeting; override in subclasses to extend or replace.
+   * Defaults to none; the telepathist overrides it. Live envoys have none: their chat UI shows
+   * a canned greeting hint instead of asking the agent for one.
    */
   protected getSpecialMessages(): Record<string, string> {
-    return specialMessages;
+    return {};
   }
 
   /**
