@@ -181,6 +181,7 @@ export async function requestBriefing(
  * progressively narrower windows via {@link withEventWindowFallback}, which rewrites
  * `state.mergedEvents` (never the slice) — mirroring the strategist's own
  * `executeDecisionWithEventFallback` so pacing's large multi-turn windows no longer lose a turn.
+ * A retry that fails for any other reason stops the narrowing.
  */
 async function generateBriefing(
   agentName: string,
@@ -192,6 +193,7 @@ async function generateBriefing(
   let result: string | undefined;
   let contextLengthExceeded = false;
 
+  // Returns true to stop: on success, or on a failure that fewer events would not fix.
   const attempt = async (): Promise<boolean> => {
     contextLengthExceeded = false;
     const output = await context.callAgent<string>(agentName, input, () => {
@@ -201,14 +203,11 @@ async function generateBriefing(
       result = output;
       return true;
     }
-    return false;
+    return !contextLengthExceeded;
   };
 
-  // First attempt with the caller-populated event window.
+  // First attempt with the caller-populated event window. Only a context-length overflow narrows.
   if (await attempt()) return result;
-
-  // Only narrow on a genuine context-length overflow; other failures won't be helped by it.
-  if (!contextLengthExceeded) return result;
 
   const eventFromTurn = parameters.lastDecisionTurn === undefined
     ? parameters.turn

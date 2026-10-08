@@ -77,6 +77,28 @@ export function continuityThreshold(model: Model): number {
   return value;
 }
 
+/** Default input limits, in estimated tokens, for providers with a hard cap. */
+const providerInputTokenLimits: Record<string, number> = {
+  // Jev accepts 32k tokens of state; the margin covers the gap between estimate and real count.
+  typesafe: 30_000,
+};
+
+/**
+ * The largest input, in estimated tokens, the model accepts. Reads `options.maxInputTokens`,
+ * falling back to the provider default (30,000 for TypeSafe), or undefined when the model has
+ * no known limit. A non-positive or non-finite value warns and falls back to the default.
+ */
+export function inputTokenLimit(model: Model): number | undefined {
+  const fallback = providerInputTokenLimits[model.provider];
+  const value = model.options?.maxInputTokens;
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    modelsLogger.warn(`Invalid maxInputTokens ${String(value)} for ${model.provider}/${model.name}; using ${fallback ?? 'no limit'}.`);
+    return fallback;
+  }
+  return value;
+}
+
 /** Applies the caller's reasoning override to an explicit or synthesized model configuration. */
 function applyReasoning(model: Model, reasoning?: ReasoningEffort | 'default'): Model {
   if (!reasoning || (reasoning === 'default' && model.options?.reasoningEffort)) return model;

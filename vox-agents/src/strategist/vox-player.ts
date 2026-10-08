@@ -392,9 +392,10 @@ export class VoxPlayer {
   /**
    * Execute a strategist decision, narrowing the event window one turn at a
    * time when the model context is exceeded. Returns true once a decision is
-   * made (including the no-op "none" strategist). If even the current turn alone
-   * is too large, returns false so the caller can retry next turn instead of
-   * recording a completed decision.
+   * made (including the no-op "none" strategist). If the current turn alone is
+   * still too large, drops its least important events one group at a time. If
+   * even its most important events are too large, returns false so the caller
+   * can retry next turn instead of recording a completed decision.
    */
   private async executeDecisionWithEventFallback(
     parameters: StrategistParameters,
@@ -405,7 +406,8 @@ export class VoxPlayer {
     const decided = await withEventWindowFallback(parameters, state, eventFromTurn, async (eventWindow) => {
       turnSpan.setAttributes({
         event_from: eventWindow.fromTurn,
-        event_to: eventWindow.toTurn
+        event_to: eventWindow.toTurn,
+        event_dropped_tiers: eventWindow.droppedTiers ?? 0
       });
 
       // Nested execution inside the established turn root: execute() uses the root's composed
@@ -418,12 +420,13 @@ export class VoxPlayer {
       if (!contextLengthExceeded) return true;
 
       this.logger.warn(
-        `Context length exceeded on turn ${parameters.turn}; retrying with a narrower event window.`,
+        `Context length exceeded on turn ${parameters.turn}; retrying with fewer events.`,
         {
           GameID: parameters.gameID,
           PlayerID: parameters.playerID,
           EventFrom: eventWindow.fromTurn,
-          EventTo: eventWindow.toTurn
+          EventTo: eventWindow.toTurn,
+          DroppedTiers: eventWindow.droppedTiers ?? 0
         }
       );
       return false;
