@@ -274,6 +274,16 @@ describe('discoverModels', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('should return the fixed OpenAI Decisions catalog without a network call', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(discoverModels('openai-decisions', {})).resolves.toEqual([
+      { id: 'openai-decisions/gpt-6-luna', provider: 'openai-decisions', name: 'gpt-6-luna' },
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('should expose typed errors for missing credentials, auth failures, and unsupported providers', async () => {
     await expect(discoverModels('synthetic', { SYNTHETIC_API_KEY: '' })).rejects.toMatchObject<Partial<DiscoveryError>>({
       kind: 'missing-credential', status: 400,

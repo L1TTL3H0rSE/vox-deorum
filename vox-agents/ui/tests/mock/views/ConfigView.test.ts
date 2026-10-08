@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import PrimeVue from 'primevue/config';
 import ConfigView from '@/views/ConfigView.vue';
 import AgentModelMappings from '@/components/config/AgentModelMappings.vue';
 import ModelDiscoveryDialog from '@/components/config/ModelDiscoveryDialog.vue';
@@ -153,6 +154,38 @@ describe('ConfigView model deletion', () => {
       label: 'openai/new-embedder',
       value: 'openai/new-embedder',
     });
+  });
+
+  it('keeps OpenAI Decisions out of chat and embedding choices while allowing it for evaluators', async () => {
+    vi.mocked(api.getCurrentConfig).mockResolvedValue({
+      apiKeys: { OPENAI_API_KEY: 'configured-key' },
+      config: {
+        agent: { name: 'vox-agents' },
+        webui: { port: 5555, enabled: true },
+        mcpServer: { transport: { type: 'http', endpoint: 'http://localhost' } },
+        logging: { level: 'info' },
+        llms: {
+          default: 'openai/gpt-chat',
+          evaluator: 'openai-decisions/gpt-6-luna',
+          'openai/gpt-chat': { provider: 'openai', name: 'gpt-chat' },
+          'openai-decisions/gpt-6-luna': { provider: 'openai-decisions', name: 'gpt-6-luna' },
+        },
+        configsDir: 'configs',
+        episodeDbPath: 'episodes.duckdb',
+        telemetryDir: 'telemetry',
+      } as VoxAgentsConfig,
+    });
+    const wrapper = mount(ConfigView, { shallow: true, global: { plugins: [PrimeVue] } });
+    await flushPromises();
+
+    const props = wrapper.findComponent(AgentModelMappings).props();
+    expect(props.availableModels).toEqual([{ label: 'openai/gpt-chat', value: 'openai/gpt-chat' }]);
+    expect(props.evaluationModels).toContainEqual({
+      label: 'openai-decisions/gpt-6-luna',
+      value: 'openai-decisions/gpt-6-luna',
+    });
+    expect(props.embeddingModels).toEqual([]);
+    wrapper.unmount();
   });
 
   it('should open discovery for a mapping, add its model locally, and save it only on Save All', async () => {

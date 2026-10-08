@@ -57,7 +57,7 @@ vi.mock('ai-sdk-provider-claude-code', () => {
   return { createClaudeCode: () => factory, claudeCode: factory };
 });
 
-import { getModel, getModelConfig, inputTokenLimit, resolveToolFraming } from '../../../src/utils/models/models.js';
+import { getEmbeddingModel, getModel, getModelConfig, inputTokenLimit, resolveToolFraming } from '../../../src/utils/models/models.js';
 import { toolRescueMiddleware } from '../../../src/utils/models/tool-rescue/middleware.js';
 import { capabilityHeading, capabilityInstruction } from '../../../src/utils/models/capability-prompt.js';
 import type { Model, ResolvedFilesConfig } from '../../../src/types/index.js';
@@ -1358,6 +1358,15 @@ describe('inputTokenLimit', () => {
       expect(inputTokenLimit(modelConfig('typesafe', 'jev-latest', value))).toBe(30_000);
       expect(inputTokenLimit(modelConfig('openai', 'gpt-x', value))).toBeUndefined();
     }
+  });
+});
+
+describe('OpenAI Decisions provider', () => {
+  it('should reject chat and embedding model requests for the evaluation-only provider', () => {
+    expect(() => getModel({ provider: 'openai-decisions', name: 'gpt-6-luna' }))
+      .toThrow("Provider 'openai-decisions' serves evaluation models only and cannot back a chat agent");
+    expect(() => getEmbeddingModel({ provider: 'openai-decisions', name: 'gpt-6-luna' }))
+      .toThrow("Embedding provider 'openai-decisions' is not supported");
   });
 });
 

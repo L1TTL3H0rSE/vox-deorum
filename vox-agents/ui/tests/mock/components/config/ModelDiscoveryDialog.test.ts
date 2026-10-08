@@ -80,6 +80,17 @@ describe('ModelDiscoveryDialog', () => {
     expect(wrapper.find('#model-discovery-provider').text()).not.toContain('AWS Bedrock');
   });
 
+  it('shows OpenAI Decisions only for evaluation discovery', () => {
+    const chatWrapper = mountDialog();
+    const evaluatorWrapper = mount(ModelDiscoveryDialog, {
+      props: { visible: true, apiKeys: {}, evaluation: true },
+      global,
+    });
+
+    expect(chatWrapper.find('#model-discovery-provider').text()).not.toContain('OpenAI Decisions');
+    expect(evaluatorWrapper.find('#model-discovery-provider').text()).toContain('OpenAI Decisions');
+  });
+
   it('prefills credentials and sends edited values to model discovery', async () => {
     api.discoverModels.mockResolvedValue({
       provider: 'openrouter',

@@ -296,6 +296,9 @@ export function getModel(config: Model, options?: {
       // Evaluation-only provider: it answers typed questions, never a chat loop.
       // Must stay before the openai-compatible default so it never synthesizes a bogus chat model.
       throw new Error(`Provider 'typesafe' serves evaluation models only and cannot back a chat agent. Configure it under the 'evaluator' alias instead.`);
+    case "openai-decisions":
+      // OpenAI Decisions serves typed evaluations only, never a chat loop.
+      throw new Error(`Provider 'openai-decisions' serves evaluation models only and cannot back a chat agent. Configure it under the 'evaluator' alias instead.`);
     default:
       if (!process.env.OPENAI_COMPATIBLE_URL)
         throw new Error("Didn't find the OPENAI_COMPATIBLE_URL in environment variables! Please check your settings.");

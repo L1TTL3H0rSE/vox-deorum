@@ -23,6 +23,8 @@ What the spans contain is the valuable part:
 - **Tool calls** record their inputs and outputs.
 - **Turn-level spans** record pacing decisions, completion status, and token usage (input, reasoning, and output, counted per step and accumulated per context).
 
+Native Decisions evaluations identify OpenAI, the model, and the Decisions API surface separately. Their evaluation span records duration, outcome, HTTP attempt count, raw per-attempt usage (including cache, reasoning, and compute details), raw answers, and provider confidence. Known usage is accrued once even when a response is refused or invalid. Missing measurements are absent from span token attributes; numeric run and context totals carry `usageComplete: false` when any attempt has incomplete accounting. A failed attempt without usage is unknown cost, not a measured zero. No monetary estimate is calculated.
+
 ### Span naming
 
 The hierarchy follows a few conventions worth knowing before writing queries. The telepathist's `TelepathistTool` base encapsulates them for its own tools.

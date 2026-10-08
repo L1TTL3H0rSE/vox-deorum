@@ -57,6 +57,8 @@ export interface ExecutionHost<TParameters extends AgentParameters> {
   reasoningTokens: number;
   /** Total output tokens (seat-wide, across all runs). Written by token accrual. */
   outputTokens: number;
+  /** False once a call's usage is incomplete; absent for legacy-only accounting. */
+  usageComplete?: boolean;
 
   /** Last model short name sent via set-metadata, so {@link updateModelLabel} can dedupe repeat sends. */
   lastModelName?: string;
@@ -154,12 +156,17 @@ export function accrueTokens<TParameters extends AgentParameters>(
   host.inputTokens += usage.inputTokens;
   host.reasoningTokens += usage.reasoningTokens;
   host.outputTokens += usage.outputTokens;
+  if (usage.usageComplete !== undefined) {
+    root.tokens.usageComplete = root.tokens.usageComplete !== false && usage.usageComplete;
+    host.usageComplete = host.usageComplete !== false && usage.usageComplete;
+  }
 
   // Populate optional token output for callers that need per-execution counts
   if (tokenOutput) {
     tokenOutput.inputTokens = usage.inputTokens;
     tokenOutput.reasoningTokens = usage.reasoningTokens;
     tokenOutput.outputTokens = usage.outputTokens;
+    if (usage.usageComplete !== undefined) tokenOutput.usageComplete = usage.usageComplete;
   }
 }
 

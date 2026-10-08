@@ -26,6 +26,7 @@ import { coerceEvaluationInput } from "../utils/models/evaluation-questions.js";
 import { formatModelReference } from "../utils/models/model-reference.js";
 import { inputTokenLimit } from "../utils/models/models.js";
 import { countTokens } from "../utils/models/token-counter.js";
+import { decisionsUsage, type DecisionsCall } from '../utils/models/providers/openai-decisions.js';
 
 /**
  * Build the error for a state larger than the model's input limit. The `__contextLengthError`
@@ -56,7 +57,7 @@ export interface EvaluateOptions<TQuestions extends Record<string, EvaluationQue
 /**
  * Run one evaluation call against a model: score the state against the question set under the
  * host's telemetry, sharing the run's abort signal and token sinks with the agent loop. Requires
- * an active root run. Evaluations report no reasoning tokens, so accrual records reasoning as 0.
+ * an active root run. Native Decisions usage, including failures, is accrued once on completion.
  *
  * @param host - The execution host (the calling VoxContext) the evaluation runs under
  * @param model - The model configuration to evaluate with (native or chat-model evaluator)
@@ -78,6 +79,9 @@ export async function evaluateOn<TParameters extends AgentParameters, TQuestions
 
   const input = coerceEvaluationInput(state);
   const agentName = host.currentAgentName;
+  const nativeDecisions = model.provider === 'openai-decisions';
+  let decisionsCall: DecisionsCall | undefined;
+  let succeeded = false;
   const span = host.tracer.startSpan(agentName ? `agent.${agentName}.evaluate` : 'evaluate', {
     attributes: {
       'vox.context.id': host.id,
@@ -87,6 +91,7 @@ export async function evaluateOn<TParameters extends AgentParameters, TQuestions
       'evaluate.purpose': options.purpose ?? 'execution',
       'evaluate.state': JSON.stringify(input),
       'evaluate.questions': JSON.stringify(options.questions),
+      ...(nativeDecisions ? { 'gen_ai.provider.name': 'openai', 'gen_ai.request.model': model.name, 'gen_ai.api.surface': 'decisions' } : {}),
     }
   });
 
@@ -103,11 +108,14 @@ export async function evaluateOn<TParameters extends AgentParameters, TQuestions
       }
 
       const result = await experimental_evaluate({
-        model: getEvaluationModel(model, host),
+        model: nativeDecisions
+          ? getEvaluationModel(model, host, call => { decisionsCall = call; })
+          : getEvaluationModel(model, host),
         state: input,
         questions: options.questions,
         // Cancellation: the active root's signal, so aborting the run stops the evaluation.
         abortSignal: host.currentSignal(),
+        ...(nativeDecisions ? { maxRetries: 0 } : {}),
       });
 
       const inputTokens = result.usage.inputTokens ?? 0;
@@ -116,18 +124,43 @@ export async function evaluateOn<TParameters extends AgentParameters, TQuestions
       span.setAttributes({
         'evaluate.answers': JSON.stringify(result.answers),
         ...(confidence === undefined ? {} : { 'evaluate.confidence': JSON.stringify(confidence) }),
-        'tokens.input': inputTokens,
-        // Evaluations answer in one structured call and report no reasoning tokens.
-        'tokens.reasoning': 0,
-        'tokens.output': outputTokens,
       });
-      accrueTokens(host, root, { inputTokens, reasoningTokens: 0, outputTokens }, options.tokenOutput);
+      if (!nativeDecisions) {
+        // Preserve the existing Jev/chat adapter's accounting contract.
+        span.setAttributes({ 'tokens.input': inputTokens, 'tokens.reasoning': 0, 'tokens.output': outputTokens });
+        accrueTokens(host, root, { inputTokens, reasoningTokens: 0, outputTokens }, options.tokenOutput);
+      }
+      succeeded = true;
       span.setStatus({ code: SpanStatusCode.OK });
       return result;
     } catch (error) {
       recordSpanError(span, error);
       throw error;
     } finally {
+      if (nativeDecisions) {
+        const measurements = decisionsCall?.usage.map(attempt => decisionsUsage(attempt.raw)) ?? [];
+        const complete = measurements.length > 0 && measurements.every(usage => usage.complete);
+        const totals: ExecuteTokenOutput = { inputTokens: 0, reasoningTokens: 0, outputTokens: 0, usageComplete: complete };
+        for (const usage of measurements) {
+          totals.inputTokens += usage.inputTokens ?? 0;
+          totals.reasoningTokens += usage.reasoningTokens ?? 0;
+          totals.outputTokens += usage.outputTokens ?? 0;
+        }
+        // Accrue once at the sink boundary, including failures after a response supplied usage.
+        accrueTokens(host, root, totals, options.tokenOutput);
+        span.setAttributes({
+          'evaluate.attempts': decisionsCall?.attempts ?? 0,
+          'evaluate.duration_ms': decisionsCall?.durationMs ?? 0,
+          'evaluate.outcome': succeeded ? 'success' : decisionsCall?.outcome === 'success' ? 'invalid-response' : decisionsCall?.outcome ?? 'error',
+          'tokens.usage.complete': complete,
+          'evaluate.provider_metadata': JSON.stringify({ openai: decisionsCall ?? { apiSurface: 'decisions', model: model.name } }),
+          ...(decisionsCall ? { 'evaluate.confidence': JSON.stringify(decisionsCall.confidence) } : {}),
+          // Missing measurements stay absent from telemetry, rather than looking like measured zeros.
+          ...(measurements.some(usage => usage.inputTokens !== undefined) ? { 'tokens.input': totals.inputTokens } : {}),
+          ...(measurements.some(usage => usage.reasoningTokens !== undefined) ? { 'tokens.reasoning': totals.reasoningTokens } : {}),
+          ...(measurements.some(usage => usage.outputTokens !== undefined) ? { 'tokens.output': totals.outputTokens } : {}),
+        });
+      }
       span.end();
     }
   });

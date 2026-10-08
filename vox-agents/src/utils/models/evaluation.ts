@@ -2,8 +2,8 @@
  * @module utils/models/evaluation
  *
  * Evaluation-model factory mirroring getEmbeddingModel. The provider is the
- * discriminator: `typesafe` builds the native Jev model from
- * `@ai-sdk/typesafe-ai`, and any chat provider is wrapped in a structured-output
+ * discriminator: `typesafe` builds native Jev, `openai-decisions` uses the
+ * Decisions endpoint, and any chat provider is wrapped in a structured-output
  * adapter that implements the AI SDK evaluation contract over `getModel(config)`,
  * so evaluation-based features work without a TypeSafe key.
  */
@@ -25,6 +25,7 @@ import { streamTextWithConcurrency, withModelConfig } from './concurrency.js';
 import type { ConcurrencyContext } from './concurrency.js';
 import { formatModelReference } from './model-reference.js';
 import { buildEvaluatorPrompt, normalizeAnswers, questionsToSchema } from './evaluation-questions.js';
+import { createOpenAIDecisions, type DecisionsCall } from './providers/openai-decisions.js';
 
 /** Stand-in execution context for evaluator calls made outside a run. */
 const detachedContext: ConcurrencyContext = { logger: createLogger('evaluation'), timeoutRefresh: undefined };
@@ -47,16 +48,19 @@ export function getEvaluatorConfig(name: string, overrides?: Record<string, Mode
 }
 
 /**
- * Get an evaluation model instance from a model configuration. The `typesafe`
- * provider returns the native evaluation model; every other (chat) provider is
+ * Get an evaluation model instance from a model configuration. Native evaluation
+ * providers return their evaluation model; every chat provider is
  * adapted through `createLanguageModelEvaluator`.
  *
  * @param config - Model configuration object (typically resolved from the `evaluator` alias)
  * @param context - Execution context for retry logging and timeout refresh; defaults to a detached one
+ * @param onDecisionsCall - Observe native call usage even when refusal or validation prevents a result
  * @returns An AI SDK evaluation model ready for `experimental_evaluate`
  */
-export function getEvaluationModel(config: Model, context?: ConcurrencyContext): EvaluationModelV4 {
+export function getEvaluationModel(config: Model, context?: ConcurrencyContext, onDecisionsCall?: (call: DecisionsCall) => void): EvaluationModelV4 {
   switch (config.provider) {
+    case 'openai-decisions':
+      return createOpenAIDecisions(config, onDecisionsCall);
     case 'typesafe':
       return createTypeSafeAi().evaluationModel(config.name);
     default:

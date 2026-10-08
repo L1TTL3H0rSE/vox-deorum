@@ -14,6 +14,8 @@ export interface ExecuteTokenOutput {
   inputTokens: number;
   reasoningTokens: number;
   outputTokens: number;
+  /** False when numeric totals omit unreported usage; absent for legacy accounting. */
+  usageComplete?: boolean;
 }
 
 /** Optional controls for a single agent execution. */

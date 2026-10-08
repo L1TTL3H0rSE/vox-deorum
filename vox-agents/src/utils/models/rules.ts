@@ -82,6 +82,7 @@ export function recommendTierModels(
 
 /** Applies all matching model-name rules without translating request-time provider options. */
 export function applyModelRules(provider: string, name: string): LLMConfig['options'] | undefined {
+  if (provider === 'openai-decisions') return undefined;
   const matches = modelRules.filter((rule) => {
     const providers = rule.provider === undefined ? undefined : Array.isArray(rule.provider) ? rule.provider : [rule.provider];
     return (providers === undefined || providers.some((candidate) => candidate === provider))

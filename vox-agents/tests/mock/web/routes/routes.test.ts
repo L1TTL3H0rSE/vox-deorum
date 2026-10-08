@@ -397,6 +397,25 @@ describe('config routes', () => {
       expect(JSON.stringify(res.body)).not.toContain('typesafe');
     });
 
+    it('does not discover or list OpenAI Decisions just because the shared OpenAI key is configured', async () => {
+      config.llms = {
+        default: structuredClone(defaultConfig.llms.default),
+        evaluator: 'openai-decisions/gpt-6-luna',
+        'openai-decisions/gpt-6-luna': { provider: 'openai-decisions', name: 'gpt-6-luna' },
+      };
+      vi.stubEnv('OPENAI_API_KEY', 'shared-key');
+      routeMocks.discoverModels.mockResolvedValue([
+        { id: 'openai/gpt-chat', provider: 'openai', name: 'gpt-chat' },
+      ]);
+
+      const res = await request(app).get('/api/config/models');
+
+      expect(res.status).toBe(200);
+      expect(routeMocks.discoverModels).not.toHaveBeenCalledWith('openai-decisions', expect.anything());
+      expect(res.body.models).toEqual([{ id: 'openai/gpt-chat', provider: 'openai', name: 'gpt-chat' }]);
+      expect(JSON.stringify(res.body)).not.toContain('openai-decisions');
+    });
+
     it('keeps evaluation-only providers out of the fallback definitions', async () => {
       config.llms = {
         default: 'openai/gpt-main',

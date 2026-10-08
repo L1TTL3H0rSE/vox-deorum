@@ -333,6 +333,39 @@ describe('ensureModelsResolved', () => {
     expect(getModelConfig('typesafe/jev-latest')).toEqual({ provider: 'typesafe', name: 'jev-latest' });
   });
 
+  it('should resolve OpenAI Decisions shared and per-agent evaluator aliases through the catalog', async () => {
+    mocks.config.llms = {
+      default: { provider: 'openai', name: 'default' },
+      evaluator: 'sharedJudge',
+      sharedJudge: 'openai-decisions/gpt-6-luna',
+      'strategist.evaluator': 'seatJudge',
+      seatJudge: 'openai-decisions/gpt-6-luna',
+    };
+    mocks.discoverModels.mockResolvedValue([
+      { id: 'openai-decisions/gpt-6-luna', name: 'gpt-6-luna' },
+    ]);
+
+    const shared = selectEvaluatorReference('diplomat');
+    const perAgent = selectEvaluatorReference('strategist');
+    await ensureModelsResolved([shared, perAgent]);
+
+    expect(mocks.discoverModels).toHaveBeenCalledTimes(1);
+    expect(mocks.discoverModels).toHaveBeenCalledWith('openai-decisions', {});
+    expect(getRuntimeModel('openai-decisions/gpt-6-luna')).toEqual({
+      provider: 'openai-decisions', name: 'gpt-6-luna',
+    });
+  });
+
+  it('should reject an OpenAI Decisions model outside its fixed catalog', async () => {
+    mocks.discoverModels.mockResolvedValue([
+      { id: 'openai-decisions/gpt-6-luna', name: 'gpt-6-luna' },
+    ]);
+
+    await expect(ensureModelsResolved(['openai-decisions/gpt-6-not-real'])).rejects.toThrow(
+      "Model 'openai-decisions/gpt-6-not-real' is not in the openai-decisions provider's model list.",
+    );
+  });
+
   describe('selectEvaluatorReference', () => {
     it('should prefer the agent evaluator then the shared alias at both scopes', () => {
       mocks.config.llms = {

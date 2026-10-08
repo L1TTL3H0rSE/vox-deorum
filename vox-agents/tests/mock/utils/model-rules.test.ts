@@ -17,7 +17,7 @@ vi.mock('../../../src/utils/logger.js', () => ({ createLogger: vi.fn(() => mocks
 
 import { getModelConfig } from '../../../src/utils/models/models.js';
 import { applyModelRules, modelRules, recommendTierModels, synthesizeModelConfig, tierRules } from '../../../src/utils/models/rules.js';
-import { isSynthesizableModelId } from '../../../src/types/constants.js';
+import { isEvaluationOnlyProvider, isSynthesizableModelId, providerCredentials } from '../../../src/types/constants.js';
 
 describe('model rules', () => {
   beforeEach(() => {
@@ -70,6 +70,28 @@ describe('model rules', () => {
   it('should not synthesize an agent identifier or unsupported provider', () => {
     expect(synthesizeModelConfig('strategist')).toBeUndefined();
     expect(synthesizeModelConfig('unknown/example')).toBeUndefined();
+  });
+
+  it('should register OpenAI Decisions as evaluation-only with the shared OpenAI key', () => {
+    expect(isSynthesizableModelId('openai-decisions/gpt-6-luna')).toBe(true);
+    expect(isEvaluationOnlyProvider('openai-decisions')).toBe(true);
+    expect(providerCredentials['openai-decisions']).toEqual({ required: ['OPENAI_API_KEY'] });
+  });
+
+  it('should not apply chat or embedding options to evaluation-only model references', () => {
+    expect(applyModelRules('openai-decisions', 'gpt-oss-embedder')).toBeUndefined();
+    expect(synthesizeModelConfig('openai-decisions/gpt-oss-embedder')).toEqual({
+      provider: 'openai-decisions',
+      name: 'gpt-oss-embedder',
+    });
+  });
+
+  it('should preserve existing TypeSafe model synthesis rules', () => {
+    expect(synthesizeModelConfig('typesafe/custom-embedder')).toEqual({
+      provider: 'typesafe',
+      name: 'custom-embedder',
+      options: { embeddingSize: 4096 },
+    });
   });
 
   it('should share provider-qualified ID validation with configuration synthesis', () => {

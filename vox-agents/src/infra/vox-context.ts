@@ -140,6 +140,8 @@ export class VoxContext<TParameters extends AgentParameters> implements Executio
    * Total output tokens (seat-wide, across all runs)
    */
   public outputTokens: number = 0;
+  /** False once a native evaluation leaves part of the seat's usage unreported. */
+  public usageComplete?: boolean;
 
   /**
    * Tracks the last model short name sent via set-metadata, to avoid duplicate updates.

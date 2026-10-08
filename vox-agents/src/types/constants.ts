@@ -39,6 +39,7 @@ export const llmProviders: LlmProviderOption[] = [
   { label: 'Claude Code', value: 'claude-code' },
   { label: 'Codex (ChatGPT)', value: 'codex' },
   { label: 'OpenAI', value: 'openai' },
+  { label: 'OpenAI Decisions', value: 'openai-decisions', evaluationOnly: true },
   { label: 'Google AI', value: 'google' },
   { label: 'AWS Bedrock', value: 'aws' },
   { label: 'OpenAI Compatible', value: 'openai-compatible' },
@@ -177,6 +178,7 @@ export function isSynthesizableModelId(modelId: string): boolean {
 /** Credential fields used by each provider's model-discovery request. */
 export const providerCredentials: Record<string, { required: readonly string[]; optional?: readonly string[] }> = {
   openai: { required: ['OPENAI_API_KEY'] },
+  'openai-decisions': { required: ['OPENAI_API_KEY'] },
   anthropic: { required: ['ANTHROPIC_API_KEY'] },
   google: { required: ['GOOGLE_GENERATIVE_AI_API_KEY'] },
   openrouter: { required: ['OPENROUTER_API_KEY'] },
