@@ -20,6 +20,7 @@
     "vp-diff": "node scripts/utilities/vp-diff.mjs",
     "update:dll": "node scripts/utilities/update-dll-pin.mjs",
     "update:claude-agent-sdk": "node scripts/utilities/update-claude-agent-sdk.mjs",
+    "release": "node scripts/utilities/release.mjs",
     "clean:all": "npm run clean -ws --if-present"
   },
   "author": "John Chen",

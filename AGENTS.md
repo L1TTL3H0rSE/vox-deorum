@@ -39,7 +39,7 @@ Read a component's `AGENTS.md` when working in that directory. Load other docume
 
 - npm workspaces: run `npm install` and `npm install <pkg>` from the repository root. Root commands for full validation are `npm run build:all` and `npm run test:all`.
 - DLL build and deployment: run `powershell -Command "& .\build-and-copy.bat"` from `civ5-dll/` when the task calls for building and deploying the DLL.
-- Release notes: read `release.txt` for the last version tag, then run `git log <tag>..HEAD --oneline --no-merges` and `git diff --stat <tag>..HEAD`. Output short grouped bullets to the console and don't write files.
+- Release notes: read `release.txt` for the last version tag, then run `git log <tag>..HEAD --oneline --no-merges` and `git diff --stat <tag>..HEAD`. Write short grouped bullets, without a top-level title, to `.tmp/release-notes.md` (gitignored) and don't commit anything. Then tell the human to edit that file and run `npm run release -- <patch|minor|major|none>` (add `--dry-run` to test). Don't run the release yourself unless asked.
 
 ## Writing Style
 

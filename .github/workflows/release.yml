@@ -17,6 +17,10 @@ on:
         required: false
         type: boolean
         default: false
+      release_notes:
+        description: 'Release notes (Markdown). Falls back to the last commit message when empty.'
+        required: false
+        type: string
 
 jobs:
   # Build installer and create release
@@ -104,18 +108,26 @@ jobs:
           Write-Host "Building version: $version"
           Write-Host "Installer will be: $installerName"
 
-      - name: Capture last commit message
+      - name: Choose release message
         id: commit_msg
         shell: pwsh
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
         run: |
-          # Read the message here, before the version bump below becomes the newest commit,
-          # so the tag and the release body carry the last real commit instead of "Release v...".
-          $message = git log -1 --pretty=%B --no-merges
+          # Prefer the dispatched release notes. Otherwise read the last commit message here,
+          # before the version bump below becomes the newest commit, so the tag and the
+          # release body carry the last real commit instead of "Release v...".
+          $message = $env:RELEASE_NOTES
+          if ([string]::IsNullOrWhiteSpace($message)) {
+            $message = (git log -1 --pretty=%B --no-merges) -join "`n"
+          }
 
-          # Hand it to later steps using the GitHub Actions multiline output format
-          echo "MESSAGE<<EOF" >> $env:GITHUB_OUTPUT
-          echo $message >> $env:GITHUB_OUTPUT
-          echo "EOF" >> $env:GITHUB_OUTPUT
+          # Hand it to later steps using the GitHub Actions multiline output format.
+          # A random delimiter keeps notes that contain "EOF" from ending the value early.
+          $delimiter = "EOF_$([guid]::NewGuid().ToString('N'))"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "MESSAGE<<$delimiter"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value $message.Trim()
+          Add-Content -Path $env:GITHUB_OUTPUT -Value $delimiter
 
       - name: Commit version updates (without pushing)
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -178,7 +190,8 @@ jobs:
           TAG_MESSAGE: ${{ steps.commit_msg.outputs.MESSAGE }}
         run: |
           git push origin main
-          git tag -a "${{ steps.version.outputs.VERSION }}" -m "$env:TAG_MESSAGE"
+          # Whitespace cleanup keeps Markdown headings, which the default strip mode drops as comments
+          git tag -a "${{ steps.version.outputs.VERSION }}" --cleanup=whitespace -m "$env:TAG_MESSAGE"
           git push origin "${{ steps.version.outputs.VERSION }}"
 
       - name: Create GitHub Release
@@ -207,10 +220,15 @@ jobs:
       - name: Dry run summary
         if: ${{ github.event.inputs.dry_run == 'true' }}
         shell: pwsh
+        env:
+          RELEASE_MESSAGE: ${{ steps.commit_msg.outputs.MESSAGE }}
         run: |
           Write-Host "=== DRY RUN SUMMARY ==="
           Write-Host "Version: ${{ steps.version.outputs.VERSION }}"
           Write-Host "Installer: ${{ steps.version.outputs.INSTALLER_NAME }}"
+          Write-Host ""
+          Write-Host "Release message:"
+          Write-Host $env:RELEASE_MESSAGE
           Write-Host ""
           Write-Host "The following changes would be made (but were skipped):"
           Write-Host "- Update version.json, release.txt, README.md, scripts/bootstrap.cmd, and scripts/installer.iss"
