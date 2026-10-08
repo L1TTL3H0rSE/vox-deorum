@@ -1,6 +1,6 @@
 # Strategic evaluation input
 
-`projectStrategicEvaluation` in `vox-agents/src/strategist/evaluation-projection.ts` builds a typed, provider-independent data object from `StrategistParameters`. It is a pure reader of the existing cache. It does not call tools or models, select a route, or change pacing. No production hook invokes it yet.
+`projectStrategicEvaluation` in `vox-agents/src/strategist/evaluation-projection.ts` builds a typed, provider-independent data object from `StrategistParameters`. It is a pure reader of the existing cache. It does not call tools or models, select a route, or change pacing. The opt-in per-turn router consumes it before preparing a strategist prompt.
 
 The exported `StrategicEvaluationInput` has a version, game/player/target-turn identity, source names, and the following evidence sections. All names, explanations, and event details are untrusted data. Explanations are never engine guarantees.
 
@@ -25,7 +25,7 @@ Plan explanations are marked as untrusted text with unknown authorship. They may
 
 The event tool redacts resource annotations using a separately fetched current player summary. The projection therefore removes resource fields recursively and reports the omission, avoiding later resource knowledge in an older projected input. It does not reconstruct historical visibility or copy cities, military reports, victory standings, arbitrary working memory, or generated briefings.
 
-Every absent, stale, incomplete, truncated or excluded section has an explicit limitation or a null value. Consumers must not interpret missing evidence, an empty event prefix, or unknown risks as permission to skip a decision. Route and fallback policy belong to a later change.
+Every absent, stale, incomplete, truncated or excluded section has an explicit limitation or a null value. Consumers must not interpret missing evidence, an empty event prefix, or unknown risks as permission to skip a decision. The [per-turn routing policy](evaluators.md#per-turn-strategic-routing) preserves the existing cadence when an evaluator recommends skipping with these unknown constraints.
 
 ## Event windows and limits
 
@@ -37,8 +37,8 @@ Refresh records the perspective and exact ID bounds of the retained event slice.
 
 `strategicProjectionLimits` keeps at most 24 event entries, 512 characters of each detail/explanation, 96 characters per name, 16 names/flavors per section and 16 uncovered ranges. Event entries follow cached-turn and report order; option dictionary keys are sorted. Omitted entries/ranges have counts and truncated sections are flagged. Structured choices have their own limits and cannot be displaced by event volume. Output does not grow with the number of cached turns or events, apart from the canonical game identity. This is a character bound, not a tokenizer-specific token budget.
 
-## Verification and next integration point
+## Verification and integration
 
 Mock tests exercise report getters, real SQLite visibility queries through an MCP client, `refreshGameState`, and the projector. They cover game/player/time exclusion, event payload identity, skipped turns and gaps, stale baselines, truncated input, quiet choices, and repeated immutable reads. Lua responses are simulated; these tests do not execute Civilization V or validate model decisions.
 
-The existing `createTriage` projectState hook can consume this object when a later change defines questions, fallback rules and pacing integration. This helper does not install that hook or depend on any specific evaluation provider.
+`strategic-routing.ts` supplies this object through the existing `createTriage` projectState hook. Routing tests cover cadence, tier floors, failures and cancellation; turn-loop tests drive actual evaluation and usage accounting over synthetic HTTP responses. These checks do not establish live model quality or game behavior.

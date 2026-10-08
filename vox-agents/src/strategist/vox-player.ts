@@ -19,6 +19,9 @@ import type { FilesSetting, PlayerConfig, TriageSetting } from "../types/config.
 import type { HumanDecisionBus } from "./human-decision-bus.js";
 import { resolveSeatFiles, resolveSeatTriage } from "./seat-config.js";
 import { isScheduledDecision, normalizePacing, shouldInterruptDecision, type NormalizedPacingConfig } from "./pacing.js";
+import { routeStrategicTurn, strategicRoutingEnabled } from './strategic-routing.js';
+import type { TriageDecision } from '../infra/vox-agent.js';
+import type { ExecuteTokenOutput } from '../infra/vox-run.js';
 
 /** Construction inputs for one seat's {@link VoxPlayer}. */
 export interface VoxPlayerOptions {
@@ -54,6 +57,8 @@ export class VoxPlayer {
   private successful = false;
   private readonly pacing: NormalizedPacingConfig;
   private lastDecisionTurn?: number;
+  /** Small decisions must not postpone the next full review. */
+  private lastFullDecisionTurn?: number;
   /**
    * Persistent event cursor: the highest event ID fetched so far. Each turn's root reads events
    * `after` this value and the cursor advances to the turn's `before` only after a successful
@@ -210,6 +215,7 @@ export class VoxPlayer {
             }
           });
 
+          let turnTokens: ExecuteTokenOutput | undefined;
           try {
             // Create a new root context for this turn's trace
             await context.with(trace.setSpan(context.active(), turnSpan), async () => {
@@ -217,6 +223,7 @@ export class VoxPlayer {
               // turn/before/after. It covers pause, refresh, pacing, the optional LLM decision, and
               // resume — all the work belonging to this strategist turn.
               await this.context.withRun({ overrides: { turn, before, after } }, async (run) => {
+                turnTokens = run.tokens;
                 const params = run.parameters;
                 await this.context.callTool("pause-game", { PlayerID: this.playerID }, params);
                 // Refresh all strategy parameters
@@ -228,9 +235,27 @@ export class VoxPlayer {
                 // leaving the cursor put so the next turn re-fetches the gap.
                 this.eventCursor = before;
 
-                const scheduled = isScheduledDecision(turn, this.lastDecisionTurn, this.pacing);
+                const routingEnabled = strategicRoutingEnabled(this.playerConfig.strategist, this.context.triage);
+                const scheduled = isScheduledDecision(turn, routingEnabled ? this.lastFullDecisionTurn : this.lastDecisionTurn, this.pacing);
                 const interrupted = shouldInterruptDecision(state, this.playerID, this.pacing);
-                const shouldDecide = scheduled || interrupted;
+                const routing = routingEnabled
+                  ? await routeStrategicTurn(this.playerConfig.strategist, params, this.context, scheduled || interrupted)
+                  : undefined;
+                const shouldDecide = routing ? routing.route !== 'skip' : scheduled || interrupted;
+                const triage: TriageDecision | undefined = routing && routing.route !== 'skip'
+                  ? routing.triage ?? { tier: routing.route, note: routing.reason }
+                  : undefined;
+                if (routing) {
+                  turnSpan.setAttributes({
+                    'routing.route': routing.route,
+                    'routing.source': routing.source,
+                    'routing.reason': routing.reason,
+                    'routing.proposed': routing.proposed ?? '',
+                    'routing.evaluator': routing.evaluator ?? '',
+                    'routing.duration_ms': routing.durationMs ?? 0,
+                    'routing.last_full_decision_turn': this.lastFullDecisionTurn ?? -1,
+                  });
+                }
 
                 if (!shouldDecide) {
                   this.logger.info(
@@ -255,9 +280,6 @@ export class VoxPlayer {
                     'completed': true,
                     'pacing.skipped': true,
                     'pacing.interrupted': false,
-                    'tokens.input': 0,
-                    'tokens.reasoning': 0,
-                    'tokens.output': 0,
                     // No deliberation on a paced skip (the strategist never ran).
                     'deliberation.ms': 0
                   });
@@ -275,7 +297,8 @@ export class VoxPlayer {
                   interrupted
                 });
 
-                const decided = await this.executeDecisionWithEventFallback(params, state, eventFromTurn, turnSpan);
+                run.signal.throwIfAborted();
+                const decided = await this.executeDecisionWithEventFallback(params, state, eventFromTurn, turnSpan, triage);
 
                 // Finalizing (the event cursor was already advanced after the refresh).
                 // Only record a completed decision when one was actually made. If the
@@ -285,6 +308,7 @@ export class VoxPlayer {
                 // next paced decision point.
                 if (decided) {
                   this.lastDecisionTurn = turn;
+                  if (triage?.tier !== 'small') this.lastFullDecisionTurn = turn;
                 }
 
                 // Recording the tokens and resume the game
@@ -299,9 +323,6 @@ export class VoxPlayer {
                   'pacing.skipped': false,
                   'pacing.decided': decided,
                   'pacing.interrupted': interrupted,
-                  'tokens.input': run.tokens.inputTokens,
-                  'tokens.reasoning': run.tokens.reasoningTokens,
-                  'tokens.output': run.tokens.outputTokens,
                   // Human deliberation time for this turn (the human strategist
                   // stashes it in workingMemory; 0/absent for non-human seats).
                   'deliberation.ms': Number(params.workingMemory["deliberationMs"] ?? "0")
@@ -322,6 +343,15 @@ export class VoxPlayer {
             this.running = false;
             await this.context.callTool("resume-game", { PlayerID: this.playerID }, this.parameters);
           } finally {
+            // Evaluator usage belongs to the turn even on skips, failures and cancellation.
+            if (turnTokens) {
+              turnSpan.setAttributes({
+                'tokens.input': turnTokens.inputTokens,
+                'tokens.reasoning': turnTokens.reasoningTokens,
+                'tokens.output': turnTokens.outputTokens,
+                ...(turnTokens.usageComplete === undefined ? {} : { 'tokens.usage.complete': turnTokens.usageComplete }),
+              });
+            }
             turnSpan.end();
             await spanProcessor.forceFlush();
           }
@@ -343,7 +373,8 @@ export class VoxPlayer {
           'completed': this.successful,
           'tokens.input': this.context.inputTokens,
           'tokens.reasoning': this.context.reasoningTokens,
-          'tokens.output': this.context.outputTokens
+          'tokens.output': this.context.outputTokens,
+          ...(this.context.usageComplete === undefined ? {} : { 'tokens.usage.complete': this.context.usageComplete }),
         });
         span.end();
 
@@ -401,7 +432,8 @@ export class VoxPlayer {
     parameters: StrategistParameters,
     state: GameState,
     eventFromTurn: number,
-    turnSpan: Span
+    turnSpan: Span,
+    triage?: TriageDecision
   ): Promise<boolean> {
     const decided = await withEventWindowFallback(parameters, state, eventFromTurn, async (eventWindow) => {
       turnSpan.setAttributes({
@@ -415,7 +447,7 @@ export class VoxPlayer {
       let contextLengthExceeded = false;
       await this.context.execute(this.playerConfig.strategist, undefined, undefined, undefined, () => {
         contextLengthExceeded = true;
-      }, { throwOnError: true });
+      }, { throwOnError: true, ...(triage ? { triage } : {}) });
 
       if (!contextLengthExceeded) return true;
 

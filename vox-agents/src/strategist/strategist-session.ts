@@ -27,6 +27,7 @@ import { unwrapMcpResponse } from "../utils/models/mcp-response.js";
 import { agentRegistry } from '../infra/agent-registry.js';
 import { ensureModelsResolved, selectEvaluatorReference, selectModelReference } from '../utils/models/resolution.js';
 import { triageEnabled } from '../infra/triage.js';
+import { strategicRoutingEnabled } from './strategic-routing.js';
 import { resolveSeatFiles, resolveSeatTriage, seatAgents } from './seat-config.js';
 import { DEFAULT_NEGOTIATOR } from '../envoy/agents/resolve-negotiator.js';
 import {
@@ -679,7 +680,7 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
    * Resolve the model references for the configured seat agents and their declared child agents.
    * Agents that triage on this seat also preflight their evaluator reference, so a misspelled
    * evaluator assignment surfaces at session start rather than on the first triaged call. Only
-   * agents with a triage hook count; a triaged agent without any evaluator logs a warning
+   * agents with a triage hook or per-turn strategic routing count; a triaged agent without any evaluator logs a warning
    * because its hook would otherwise skip silently. Arbitrary override-map entries are
    * deliberately excluded because they cannot run in this session.
    *
@@ -712,7 +713,8 @@ ${overrideLine}Game.SetAIAutoPlay(${autoPlayTurnLimit}, -1);`
       for (const tier of modelTiers) {
         references.add(selectModelReference(name, tier, playerConfig.llms));
       }
-      if (!triageEnabled(name, triage) || !agentRegistry.get(name)?.triage) continue;
+      if (!triageEnabled(name, triage) || (!agentRegistry.get(name)?.triage
+        && !(name === seat.strategist && strategicRoutingEnabled(name, triage)))) continue;
       const evaluator = selectEvaluatorReference(name, playerConfig.llms);
       if (evaluator !== undefined) references.add(evaluator);
       else logger.warn(`Triage is on for ${name} on seat ${slot}, but neither \`${name}.evaluator\` nor \`evaluator\` is configured; it will run without triage.`);

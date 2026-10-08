@@ -62,7 +62,25 @@ Triage picks a model tier (`small`, `default`, or `large`) once at the start of 
 - **Failures.** If the hook fails, the agent keeps its own tier and the span notes `triage failed`. Cancellation still stops the run.
 - **Bypassing it.** A caller can pass a decision through the execute options, or `Tier` on any `call-*` tool, without enabling triage.
 
-Only the diplomat has a hook today. It rates intent and stakes from the recent conversation and any open deal, then routes small talk to `small`, high-stakes deals and threats to `large`, and everything else to `default`. See [Envoys](envoy.md). The `strategist` role is accepted, but strategists do not triage yet.
+The diplomat rates intent and stakes from the recent conversation and any open deal, then routes small talk to `small`, high-stakes deals and threats to `large`, and everything else to `default`. See [Envoys](envoy.md).
+
+### Per-turn strategic routing
+
+For `simple-strategist` and its briefed, staffed and learned variants, the same opt-in also enables routing in `VoxPlayer` before the cadence check. Human, none, null and evaluator strategists keep their existing execution path. `strategic-routing.ts` reuses `createTriage` with the [bounded strategic projection](evaluation-projection.md); it does not prepare the full strategist prompt or fetch extra reports just to route.
+
+For example, a seat with `triage: ['strategist']`, `pacing.everyTurns: 3`, `pacing.interruption: 'importantEvents'` and an explicit `evaluator` assignment gets a full decision first, then an evaluator check on eligible intervening turns. An ordinary chat evaluator, Jev or OpenAI Decisions can serve that assignment. The existing `<agent>.small`, `<agent>.default`, `<agent>.large` and shared tier aliases select the execution models; no new provider or routing setting is needed.
+
+| Recommendation | Result |
+| --- | --- |
+| `small` | A routine extra decision between full reviews; raised to `default` when a full review or configured interruption is due. |
+| `default` or `large` | Execute that tier and restart the full-review cadence after successful completion. |
+| `skip` | Fall back to the existing cadence. Current reports leave mandatory choices, deadlines and risks unknown, so this is not an evaluator-certified safe skip. A due full review still runs. |
+
+Small decisions update the last-decision marker and event window, but do not postpone the full-review deadline. With the default `everyTurns: 1`, each turn requires at least `default`. This first version can add decisions between scheduled reviews; it does not claim fewer calls than ordinary pacing or validated playing strength.
+
+Missing evaluators, stale or incomplete report provenance, uncovered events, truncation, refusals and failed evaluations preserve the cadence. The first decision requires no evaluator call. Cancellation stops the run, including when a provider returns an answer late. A selected tier is passed through `ExecuteOptions.triage` and reused during event-window retries, without a second triage call.
+
+Turn spans record the proposed and final route, source, reason, evaluator and elapsed time; the child execution span records the actual model. Evaluator usage remains part of the turn even on skips or failures, including the native backend's incomplete-usage flag. Preflight resolves the evaluator alias before a session starts.
 
 ## Diplomatic analyst
 

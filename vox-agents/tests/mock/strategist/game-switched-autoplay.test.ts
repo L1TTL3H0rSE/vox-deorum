@@ -50,6 +50,7 @@ vi.mock('node:timers/promises', () => ({ setTimeout: () => Promise.resolve() }))
 
 import { StrategistSession } from '../../../src/strategist/strategist-session.js';
 import { agentRegistry } from '../../../src/infra/agent-registry.js';
+import { SimpleStrategist } from '../../../src/strategist/agents/simple-strategist.js';
 import { voxCivilization } from '../../../src/infra/vox-civilization.js';
 import {
   autoPlayTurnLimit,
@@ -183,6 +184,27 @@ describe('handleGameSwitched autoplay reconciliation', () => {
 });
 
 describe('model preflight', () => {
+  it.each([true, false])('should preflight per-turn strategist evaluators only when the seat opts in (%s)', async enabled => {
+    const llms = { 'simple-strategist.evaluator': 'native-evaluator' };
+    const strategist = new SimpleStrategist();
+    modelMocks.selectModelReference.mockImplementation((name: string) => name);
+    modelMocks.selectEvaluatorReference.mockReturnValue('native-evaluator');
+    vi.spyOn(agentRegistry, 'get').mockImplementation(name => name === strategist.name ? strategist : undefined);
+    vi.mocked(voxCivilization.startGame).mockResolvedValue(false);
+    const s = new StrategistSession({
+      name: 'strategic-route-preflight', type: 'strategist', autoPlay: false, gameMode: 'start',
+      triage: !enabled,
+      llmPlayers: { 0: { strategist: strategist.name, triage: enabled ? ['strategist'] : false, llms } },
+    }, {} as never, null);
+    await expect(s.start()).rejects.toThrow('Failed to start Civilization V');
+    if (enabled) {
+      expect(modelMocks.selectEvaluatorReference).toHaveBeenCalledWith(strategist.name, llms);
+      expect(modelMocks.ensureModelsResolved).toHaveBeenCalledWith(expect.arrayContaining(['native-evaluator']), llms);
+    } else {
+      expect(modelMocks.selectEvaluatorReference).not.toHaveBeenCalled();
+    }
+  });
+
   it('preflights reachable support and diplomacy agents without resolving unused seat overrides', async () => {
     const overrides = {
       'selected-strategist': 'openai/strategist',
