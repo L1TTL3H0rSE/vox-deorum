@@ -67,7 +67,7 @@ describe("strategy-parameters", () => {
 
       await refreshGameState(ctx.asContext(), params);
 
-      expect(ctx.calls("get-events")[0].args).toEqual({ After: 12, Before: 34 });
+      expect(ctx.calls("get-events")[0].args).toEqual({ GameID: params.gameID, PlayerID: params.playerID, After: 12, Before: 34 });
       expect(ctx.calls("get-options")[0].args).toEqual({ Mode: "Flavor" });
     });
 

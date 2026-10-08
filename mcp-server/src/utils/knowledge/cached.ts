@@ -9,10 +9,11 @@ import { stripMutableKnowledgeMetadata, stripPublicKnowledgeMetadata } from './s
  * @param playerId - The player ID to read knowledge for
  * @param table - The table name in the knowledge database
  * @param fetch - Callback to fetch the knowledge if not found in cache
- * @returns The knowledge data or null if not found/not visible
+ * @param retainTurn - Preserve the saved row's turn in the returned knowledge
+ * @returns The knowledge data, null if not found/not visible, or undefined when no player ID is provided
  */
 export async function readPlayerKnowledge<T>
-  (playerId: number | undefined, table: string, fetch: (playerId: number) => Promise<T | null>): Promise<T | null | undefined> {
+  (playerId: number | undefined, table: string, fetch: (playerId: number) => Promise<T | null>, retainTurn = false): Promise<(T & { Turn?: number }) | null | undefined> {
   if (playerId === undefined) return undefined;
 
   // First attempt to read from the mutable knowledge store
@@ -20,7 +21,7 @@ export async function readPlayerKnowledge<T>
 
   // Use getMutableKnowledge to read from the knowledge database
   // The key for player-specific knowledge is typically the playerId
-  let cached = await store.getMutableKnowledge(
+  const cached = await store.getMutableKnowledge(
     table as any,
     playerId,
     undefined,
@@ -30,10 +31,12 @@ export async function readPlayerKnowledge<T>
     }
   );
 
-  cached = stripMutableKnowledgeMetadata(cached as any);
+  const turn = retainTurn ? cached?.Turn : undefined;
+  const stripped = stripMutableKnowledgeMetadata(cached as any) as (T & { Turn?: number }) | null;
+  if (retainTurn && turn !== undefined && stripped) stripped.Turn = turn;
 
   // Return the cached data if found, otherwise null
-  return cached as T | null;
+  return stripped;
 }
 
 /**

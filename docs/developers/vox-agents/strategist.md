@@ -55,6 +55,8 @@ When a decision spans several turns, an event-window fallback assembles a derive
 
 ### Persistent state and decision modes
 
+The provider-independent [evaluation projection](evaluation-projection.md) is an optional cache reader for future routing integration. It exposes bounded evidence and its limitations without changing this player loop.
+
 State that persists across turns lives in the seat's base parameters, `StrategistParameters` (`src/strategist/strategy-parameters.ts`):
 
 - Cached per-turn game-state snapshots (old ones are culled).

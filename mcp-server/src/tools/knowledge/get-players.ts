@@ -24,6 +24,7 @@ import { Selectable } from "kysely";
 import { sortBySchema } from "../../utils/schema.js";
 import { stripTags } from "../../utils/database/localized.js";
 import { annotateSubjects } from "./get-opinions.js";
+import { knowledgeManager } from "../../server.js";
 
 // Re-export the minor-civ leader sentinel so `get-players` consumers can still find it here; the
 // single source of truth lives in the dependency-free base schema alongside MaxMajorCivs.
@@ -87,6 +88,8 @@ const PlayerDataSchema = z.object({
     TheyGive: z.array(z.string())
   }))).optional(),
   Quests: z.array(z.string()).optional(),
+  Source: z.object({ GameID: z.string(), PlayerID: z.number(), Turn: z.number().optional() })
+    .describe("Game, player, and live game turn that produced this player's summary").optional(),
 }).passthrough();
 
 /**
@@ -138,6 +141,7 @@ class GetPlayersTool extends ToolBase {
    * Execute the tool to retrieve player data
    */
   async execute(args: z.infer<typeof this.inputSchema>): Promise<z.infer<typeof this.outputSchema>> {
+    const gameID = knowledgeManager.getGameId();
     // Get static player information, current player summaries, opinions, and strategies in parallel
     const [initialPlayerInfos, playerSummaries, playerOpinions] = await Promise.all([
       readPublicKnowledgeBatch("PlayerInformations", getPlayerInformations),
@@ -208,7 +212,6 @@ class GetPlayersTool extends ToolBase {
         // Dynamic summary (if available)
         ...cleanSummary
       } as unknown as z.infer<typeof PlayerDataSchema>;
-
       // Text format for happiness
       if (playerData.HappinessPercentage !== undefined) {
         if (playerData.HappinessPercentage <= 20)
@@ -250,9 +253,19 @@ class GetPlayersTool extends ToolBase {
       // Postprocess to remove things you shouldn't see
       if (visibility !== 2) postProcessData(playerData, playerInfos, playerSummaries, args.PlayerID, diplomatPoints);
 
-      playersDict[playerID.toString()] = sortBySchema(cleanEventData(playerData, false)!, PlayerDataSchema);
+      const cleanedPlayerData = sortBySchema(cleanEventData(playerData, false)!, PlayerDataSchema);
+      if (args.PlayerID === playerID) {
+        // Attach after recursive ID normalization; this is provenance, not an entity reference.
+        cleanedPlayerData.Source = {
+          GameID: gameID,
+          PlayerID: playerID,
+          ...(typeof summary?.Turn === "number" ? { Turn: summary.Turn } : {})
+        };
+      }
+      playersDict[playerID.toString()] = cleanedPlayerData;
     }
     
+    if (knowledgeManager.getGameId() !== gameID) throw new Error("Game changed while retrieving player summaries.");
     return playersDict;
   }
 }

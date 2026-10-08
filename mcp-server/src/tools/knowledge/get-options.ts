@@ -19,6 +19,7 @@ import { enumMappings } from "../../utils/knowledge/enum.js";
 import { getTool } from "../index.js";
 import { formatPolicyHelp } from "../../utils/database/format.js";
 import { loadGrandStrategyDescriptions, loadFlavorDescriptions } from "../../utils/strategies/loader.js";
+import { knowledgeManager } from "../../server.js";
 
 /**
  * Input schema for the GetOptions tool
@@ -42,10 +43,14 @@ const GetOptionsOutputSchema = z.object({
     Policies: z.any()
   }),
   // Persona fields
+  // Source.Turn is from the live options row; UpdatedTurn below is saved decision metadata.
+  Source: z.object({ GameID: z.string(), PlayerID: z.number(), Turn: z.number().optional() })
+    .describe("Game, player, and live game turn that produced this options report").optional(),
   Persona: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   // Strategy - current selections and rationale
   Strategy: z.object({
     Rationale: z.string().optional(),
+    UpdatedTurn: z.number().describe("Turn when the saved strategy decision was recorded").optional(),
     GrandStrategy: z.string().optional(),
     // Strategies - only in Strategy mode
     EconomicStrategies: z.array(z.string()).optional(),
@@ -56,12 +61,14 @@ const GetOptionsOutputSchema = z.object({
   // Technology - current selection
   Technology: z.object({
     Next: z.string(),
-    Rationale: z.string().optional()
+    Rationale: z.string().optional(),
+    UpdatedTurn: z.number().describe("Turn when the saved research decision was recorded").optional()
   }),
   // Policy - current selection
   Policy: z.object({
     Next: z.string(),
-    Rationale: z.string().optional()
+    Rationale: z.string().optional(),
+    UpdatedTurn: z.number().describe("Turn when the saved policy decision was recorded").optional()
   }),
   // Relationships - diplomatic relationship modifiers set by the player
   Relationships: z.record(z.string(), z.object({
@@ -120,10 +127,10 @@ class GetOptionsTool extends ToolBase {
    * Execute the tool to retrieve player options
    */
   async execute(args: z.infer<typeof this.inputSchema>): Promise<z.infer<typeof this.outputSchema>> {
+    const gameID = knowledgeManager.getGameId();
     const isFlavorMode = args.Mode === "Flavor";
 
     const [
-      allOptions,
       persona,
       technologies,
       policies,
@@ -137,24 +144,27 @@ class GetOptionsTool extends ToolBase {
       flavorDescriptions,
       relationships
     ] = await Promise.all([
-      getPlayerOptions(true),
       readPlayerKnowledge(args.PlayerID, "PersonaChanges", getPlayerPersona),
       getTool("getTechnology")?.getSummaries(),
       getTool("getPolicy")?.getSummaries(),
       loadGrandStrategyDescriptions(args.Mode),
       readPlayerKnowledge(args.PlayerID, "ResearchChanges", async () => {
         return { Technology: "None", Rationale: undefined }
-      }),
+      }, true),
       readPlayerKnowledge(args.PlayerID, "PolicyChanges", async () => {
         return { Policy: "None", IsBranch: 0, Rationale: undefined }
-      }),
-      isFlavorMode ? null : readPlayerKnowledge(args.PlayerID, "StrategyChanges", getPlayerStrategy),
+      }, true),
+      isFlavorMode ? null : readPlayerKnowledge(args.PlayerID, "StrategyChanges", getPlayerStrategy, true),
       isFlavorMode ? null : getTool("getEconomicStrategy")?.getSummaries(),
       isFlavorMode ? null : getTool("getMilitaryStrategy")?.getSummaries(),
-      !isFlavorMode ? null : readPlayerKnowledge(args.PlayerID, "FlavorChanges", getPlayerFlavors),
+      !isFlavorMode ? null : readPlayerKnowledge(args.PlayerID, "FlavorChanges", getPlayerFlavors, true),
       !isFlavorMode ? null : loadFlavorDescriptions(),
       getPlayerRelationships(args.PlayerID)
     ]);
+
+    // Read the live options row last so its turn can bound the saved/fallback data above.
+    const allOptions = await getPlayerOptions(true);
+    if (knowledgeManager.getGameId() !== gameID) throw new Error("Game changed while retrieving player options.");
 
     // Find options for the requested player
     if (!Array.isArray(allOptions)) {
@@ -244,11 +254,13 @@ class GetOptionsTool extends ToolBase {
       Options: optionsObject,
       Technology: {
         Next: research?.Technology ?? "None",
-        Rationale: research?.Rationale
+        Rationale: research?.Rationale,
+        UpdatedTurn: research?.Turn
       },
       Policy: {
         Next: policy?.Policy ? `${policy.Policy} (${policy.IsBranch ? "New Branch" : "Policy"})` : "None",
-        Rationale: policy?.Rationale
+        Rationale: policy?.Rationale,
+        UpdatedTurn: policy?.Turn
       },
       Relationships: Object.keys(relationships).length > 0 ? relationships : undefined
     };
@@ -256,9 +268,10 @@ class GetOptionsTool extends ToolBase {
     // Add mode-specific result fields
     if (isFlavorMode) {
       // In Flavor mode: Add current flavors
-      const { Key: _Key, Rationale, GrandStrategy, ...flavorValues } = flavors!;
+      const { Key: _Key, Turn: _Turn, Rationale, GrandStrategy, ...flavorValues } = flavors!;
       result.Strategy = {
         Rationale: Rationale,
+        UpdatedTurn: flavors?.Turn,
         GrandStrategy: GrandStrategy,
         Flavors: flavorValues
       };
@@ -267,6 +280,7 @@ class GetOptionsTool extends ToolBase {
       // In Strategy mode: Add strategy information
       result.Strategy = {
         Rationale: (strategies as Record<string, unknown> | null)?.Rationale as string | undefined,
+        UpdatedTurn: strategies?.Turn,
         GrandStrategy: strategies?.GrandStrategy,
         EconomicStrategies: strategies?.EconomicStrategies,
         MilitaryStrategies: strategies?.MilitaryStrategies
@@ -296,6 +310,13 @@ class GetOptionsTool extends ToolBase {
         })
       );
     }
+
+    // Omit Turn when the live Lua row did not provide one; request/database time is not equivalent.
+    result.Source = {
+      GameID: gameID,
+      PlayerID: args.PlayerID,
+      ...(typeof playerOptions.Turn === "number" ? { Turn: playerOptions.Turn } : {})
+    };
 
     return result;
   }

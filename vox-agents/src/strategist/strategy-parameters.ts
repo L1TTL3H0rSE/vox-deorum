@@ -68,6 +68,10 @@ export interface GameState {
    * treated as sufficient, so existing callers are unaffected.
    */
   eventsAfter?: number;
+  /** Inclusive upper ID bound belonging to the retained event slice. */
+  eventsBefore?: number;
+  /** Request perspective belonging to that slice, not a claim of an atomic historical snapshot. */
+  eventsPerspective?: { gameID: string; playerID: number };
   /**
    * The derived multi-turn pacing window for this state's strategist decision, assembled by
    * {@link withEventWindowFallback}/{@link mergeCachedEvents}. Kept separate from the immutable
@@ -134,6 +138,8 @@ export async function refreshGameState(
     await context.callTool<GameMetadata>("get-game-settings", { PlayerID: parameters.playerID }, parameters);
 
   // Get the information
+  // Preserve the request identity/bounds even if shared seat parameters change while awaiting it.
+  const eventParameters = { ...parameters };
   const [players, events, cities, options, victory, military] = await Promise.all([
     context.callTool<PlayersReport>("get-players", {}, parameters),
     // Fetch every event since the last fetched ID (parameters.after is the cursor,
@@ -143,7 +149,10 @@ export async function refreshGameState(
     // mergeCachedEvents. We fetch the consolidated (optimized) format so strategists
     // and briefers get the compact turn-keyed report; pacing interruption checks
     // parse that same consolidated shape.
-    context.callTool<EventsReport>("get-events", { After: parameters.after, Before: parameters.before }, parameters),
+    context.callTool<EventsReport>("get-events", {
+      GameID: eventParameters.gameID, PlayerID: eventParameters.playerID,
+      After: eventParameters.after, Before: eventParameters.before
+    }, eventParameters),
     context.callTool<CitiesReport>("get-cities", {}, parameters),
     context.callTool<OptionsReport>("get-options", { Mode: parameters.mode }, parameters),
     context.callTool<VictoryProgressReport>("get-victory-progress", {}, parameters),
@@ -181,18 +190,21 @@ export async function refreshGameState(
     existing.victory = victory;
     const prevAfter = existing.eventsAfter;
     let takeFetched: boolean;
-    if (existing.events === undefined) {
+    if (existing.events === undefined || (existing.eventsPerspective !== undefined
+      && (existing.eventsPerspective.gameID !== eventParameters.gameID || existing.eventsPerspective.playerID !== eventParameters.playerID))) {
       takeFetched = true;
-    } else if (prevAfter === undefined || parameters.after === prevAfter) {
+    } else if (prevAfter === undefined || eventParameters.after === prevAfter) {
       // Unknown coverage or identical lower bound: keep the larger serialized slice.
       takeFetched = JSON.stringify(events).length > JSON.stringify(existing.events).length;
     } else {
       // Different coverage: the wider window (smaller `after`) wins regardless of serialized size.
-      takeFetched = parameters.after < prevAfter;
+      takeFetched = eventParameters.after < prevAfter;
     }
     if (takeFetched) {
       existing.events = events;
-      existing.eventsAfter = parameters.after;
+      existing.eventsAfter = eventParameters.after;
+      existing.eventsBefore = eventParameters.before;
+      existing.eventsPerspective = { gameID: eventParameters.gameID, playerID: eventParameters.playerID };
     }
     currentState = existing;
   } else {
@@ -205,7 +217,9 @@ export async function refreshGameState(
       victory,
       reports: {},
       turn: parameters.turn,
-      eventsAfter: parameters.after
+      eventsAfter: eventParameters.after,
+      eventsBefore: eventParameters.before,
+      eventsPerspective: { gameID: eventParameters.gameID, playerID: eventParameters.playerID }
     };
     parameters.gameStates[parameters.turn] = currentState;
   }

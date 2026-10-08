@@ -18,6 +18,7 @@ import pluralize from 'pluralize-esm'
  * Input schema for the GetEvents tool
  */
 const GetEventsInputSchema = z.object({
+  GameID: z.string().optional().describe("Expected game identity; reject a different active game"),
   Turn: z.number().optional().describe("Turn number filter"),
   Type: z.string().optional().describe("Event type string filter"),
   After: z.number().optional().describe("Only filter events after the ID"),
@@ -96,7 +97,7 @@ class GetEventsTool extends ToolBase {
    * Optional metadata for the tool
    */
   readonly metadata = {
-    autoComplete: ["PlayerID", "Before", "After", "Original"],
+    autoComplete: ["GameID", "PlayerID", "Before", "After", "Original"],
     markdownConfig: ["Turn {key}", "{key}"]
   }
 
@@ -104,7 +105,12 @@ class GetEventsTool extends ToolBase {
    * Execute the tool to retrieve game events
    */
   async execute(args: z.infer<typeof this.inputSchema>): Promise<z.infer<typeof this.outputSchema>> {
-    const db = knowledgeManager.getStore().getDatabase();
+    const gameID = knowledgeManager.getGameId();
+    if (args.GameID !== undefined && args.GameID !== gameID) {
+      throw new Error("Event request does not match the active game");
+    }
+    const store = knowledgeManager.getStore();
+    const db = store.getDatabase();
     
     // Build the query
     let query = db.selectFrom("GameEvents")
@@ -133,7 +139,10 @@ class GetEventsTool extends ToolBase {
 
     // Get the player
     const player = args.PlayerID === undefined ? null :
-      await knowledgeManager.getStore().getMutableKnowledge("PlayerSummaries", args.PlayerID, undefined, async () => await getPlayerSummaries());
+      await store.getMutableKnowledge("PlayerSummaries", args.PlayerID, undefined, async () => await getPlayerSummaries());
+    if (knowledgeManager.getGameId() !== gameID) {
+      throw new Error("Active game changed while retrieving events");
+    }
     
     // Format the output
     const formattedEvents = events.map((event) => {
@@ -143,11 +152,11 @@ class GetEventsTool extends ToolBase {
         : processedPayload;
 
       return {
+        ...toolPayload,
         ID: event.ID,
         Turn: event.Turn,
         Type: event.Type,
         Visibility: args.PlayerID === undefined ? parseVisibility(event) : undefined,
-        ...toolPayload
       };
     });
     

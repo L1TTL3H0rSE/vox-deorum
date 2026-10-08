@@ -261,6 +261,7 @@ Game.RegisterFunction("${Name}", function(${Arguments})
 
       local summary = {
         Key = playerID,
+        Turn = Game.GetGameTurn(),
         Score = player:GetScore(),  -- Player's current score
         Era = currentEra,
         Votes = votes,  -- Votes in the World Congress/UN
@@ -685,6 +686,7 @@ Game.RegisterFunction("${Name}", function(${Arguments})
 
       local summary = {
         Key = playerID,
+        Turn = Game.GetGameTurn(),
         MajorAlly = nil,  -- Will be populated below
         Cities = player:GetNumCities(),
         Population = player:GetTotalPopulation(),

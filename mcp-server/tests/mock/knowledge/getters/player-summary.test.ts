@@ -11,9 +11,13 @@ import { LuaFunction } from '../../../../src/bridge/lua-function.js';
 import { getPlayerSummaries } from '../../../../src/knowledge/getters/player-summary.js';
 import type { KnowledgeStore } from '../../../../src/knowledge/store.js';
 
+vi.mock('../../../../src/knowledge/getters/random-seeds.js', () => ({ getRandomSeeds: vi.fn(async () => null) }));
+vi.mock('../../../../src/knowledge/getters/player-information.js', () => ({ getPlayerInformations: vi.fn(async () => []) }));
+
 let store: KnowledgeStore;
 
 beforeEach(async () => {
+  vi.spyOn(LuaFunction.prototype, 'execute').mockResolvedValue({ success: true, result: [] } as any);
   store = await setupStore(10);
 });
 
@@ -30,6 +34,7 @@ function mockLua(result: unknown, success = true) {
 /** A summary with all not-null columns populated; visibility via Player<N> fields. */
 const baseSummary = (key: number, overrides: Record<string, any> = {}) => ({
   Key: key,
+  Turn: 17,
   Era: 'ERA_MEDIEVAL',
   Cities: 3,
   Population: 12,
@@ -53,6 +58,7 @@ describe('getPlayerSummaries', () => {
 
     const result = await getPlayerSummaries();
     expect(result[0].Era).toBe('Medieval');
+    expect(result[0].Turn).toBe(17);
 
     // Persisted as mutable knowledge under the summary's Key.
     const stored = await store.getMutableKnowledge('PlayerSummaries', 0);

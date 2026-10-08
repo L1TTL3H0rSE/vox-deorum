@@ -12,6 +12,7 @@ for playerID = 0, GameDefines.MAX_MAJOR_CIVS - 1 do
   if player and player:IsAlive() then
     local playerOptions = {
       PlayerID = playerID,
+      Turn = Game.GetGameTurn(),
       EconomicStrategies = player:GetPossibleEconomicStrategies(),
       MilitaryStrategies = player:GetPossibleMilitaryStrategies(),
       Technologies = player:GetPossibleTechs(true),

@@ -13,11 +13,15 @@ import { enumMappings } from '../../../../src/utils/knowledge/enum.js';
 import { getPlayerOptions } from '../../../../src/knowledge/getters/player-options.js';
 import type { KnowledgeStore } from '../../../../src/knowledge/store.js';
 
+vi.mock('../../../../src/knowledge/getters/random-seeds.js', () => ({ getRandomSeeds: vi.fn(async () => null) }));
+vi.mock('../../../../src/knowledge/getters/player-information.js', () => ({ getPlayerInformations: vi.fn(async () => []) }));
+
 let store: KnowledgeStore;
 
 const injectedEnums = ['EconomicStrategy', 'MilitaryStrategy', 'TechID', 'PolicyID', 'BranchType'];
 
 beforeEach(async () => {
+  vi.spyOn(LuaFunction.prototype, 'execute').mockResolvedValue({ success: true, result: [] } as any);
   store = await setupStore(10);
   enumMappings.EconomicStrategy = { 10: 'Growth', 11: 'Trade' };
   enumMappings.MilitaryStrategy = { 20: 'War', 21: 'Defense' };
@@ -39,6 +43,7 @@ function mockLua(result: unknown, success = true) {
 
 const samplePlayer = (playerId: number) => ({
   PlayerID: playerId,
+  Turn: 17,
   EconomicStrategies: [11, 10],
   MilitaryStrategies: [20],
   Technologies: [100],
@@ -62,6 +67,7 @@ describe('getPlayerOptions', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       PlayerID: 0,
+      Turn: 17,
       EconomicStrategies: ['Trade', 'Growth'], // map order preserved (no sort here)
       MilitaryStrategies: ['War'],
       Technologies: ['Pottery'],
@@ -80,7 +86,7 @@ describe('getPlayerOptions', () => {
       .where('Player0', '>', 0)
       .execute();
     expect(visibleTo0).toHaveLength(1);
-    expect(visibleTo0[0]).toMatchObject({ PlayerID: 0, Turn: 10 });
+    expect(visibleTo0[0]).toMatchObject({ PlayerID: 0, Turn: 17 });
 
     const visibleTo1 = await store
       .getDatabase()

@@ -62,6 +62,7 @@ export async function getPlayerOptions(saving: boolean = true): Promise<Partial<
   const processedResults = (rawOptions as any[]).map((options: any) => {
     return {
       PlayerID: options.PlayerID,
+      Turn: options.Turn,
       EconomicStrategies: convertToNames(options.EconomicStrategies, "EconomicStrategy", "MilitaryStrategy"),
       MilitaryStrategies: convertToNames(options.MilitaryStrategies, "MilitaryStrategy", "EconomicStrategy"),
       Technologies: convertToNames(options.Technologies, "TechID"),
@@ -79,7 +80,8 @@ export async function getPlayerOptions(saving: boolean = true): Promise<Partial<
     processedResults.map((options: any) => {
       return { 
         data: options,
-        visibilityFlags: composeVisibility([options.PlayerID])
+        visibilityFlags: composeVisibility([options.PlayerID]),
+        turn: options.Turn
       };
     })
   );
