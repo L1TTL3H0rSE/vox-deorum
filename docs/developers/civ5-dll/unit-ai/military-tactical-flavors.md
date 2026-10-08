@@ -2,7 +2,7 @@
 
 **Military tactical flavors** are five 0 to 100 dials that change how [tactical simulation](military-tactical-simulation.md) judges a plan. They don't add new moves or remove safety checks. They change how much the search cares about cities, enemy units, its own cities and territory, and danger. As a result, a different plan can win among the moves the search would already consider.
 
-Every flavor is neutral at 50. A search with all five at 50 and RISK unset scores exactly as stock Vox Populi does.
+Every flavor is neutral at 50. A search with all five at 50 and RISK unset keeps stock scoring.
 
 Each search gets its own flavors in three layers:
 
@@ -23,8 +23,8 @@ The code lives in a few places:
 | **RISK** | How much danger and loss will we accept? | More risk-taking: fewer HP needed to hold the line, one loss allowed in large groups, and less weight on danger |
 | **OCCUPATION** | How much do cities matter as targets? | City damage and captures count more |
 | **ATTRITION** | How much does damaging enemy units matter? | Unit damage and kills count more |
-| **HOLD_CITY** | How much should units guard our threatened cities? | Units stay in and around threatened cities, and shoot siege units near them |
-| **HOLD_GROUND** | How much should units hold friendly ground? | Units stand on good ground at home and are pulled less into enemy territory |
+| **HOLD_CITY** | How much should units guard our threatened cities? | Units hold friendly frontline cities and focus attacks on enemies threatening friendly cities in the search area |
+| **HOLD_GROUND** | How much should units hold friendly ground? | Units stand on good ground at home, are pulled less into enemy territory, and value hits on enemies standing on our land |
 
 ## Where a search's flavors come from
 
@@ -132,15 +132,14 @@ flowchart TD
     S --> B[Bonus]
     S --> P[Plot score]
     D --> D1["City damage x w(OCCUPATION), capped"]
-    D --> D2["Unit damage x w(ATTRITION), capped"]
+    D --> D2["Unit damage x w(ATTRITION), capped<br/>on our land, ATTRITION is at least 50 + (HOLD_GROUND - 50) / 2"]
     B --> B1["Capture and kill bonuses, capped"]
-    B --> B2["Siege sniping: HOLD_CITY bonus"]
+    B --> B2["Attacks on city threats: HOLD_CITY bonus"]
     P --> P1["Desirability<br/>outside friendly territory / w(HOLD_GROUND)"]
     P --> P2[End-of-turn score]
     P2 --> E1["Danger penalty / w(RISK), when RISK is set"]
-    P2 --> E2["Frontline bonus x w(HOLD_CITY) in a city<br/>or w(HOLD_GROUND) in a citadel"]
+    P2 --> E2["Frontline bonus x city hold weight in a city<br/>or w(HOLD_GROUND) in a citadel"]
     P2 --> E3["Home ground: HOLD_GROUND bonus"]
-    P2 --> E4["City ring: HOLD_CITY bonus"]
 ```
 
 Damage and bonuses count ten times as much as plot score in the [assignment score](military-tactical-simulation.md#scoring). To keep a large hit at a high weight from saturating the 16-bit score, each attack term may change by at most 500 through its flavor, before the x10. This cap is `TACTICAL_FLAVOR_ATTACK_SHIFT_LIMIT`.
@@ -150,10 +149,10 @@ Damage and bonuses count ten times as much as plot score in the [assignment scor
 | Part | Stock rule | Flavored rule |
 | --- | --- | --- |
 | City damage | As forecast | x w(OCCUPATION), change capped at 500 |
-| Unit damage | As forecast | x w(ATTRITION), change capped at 500 |
+| Unit damage | As forecast | x w(ATTRITION), change capped at 500. On an enemy land unit standing on a plot our team owns, ATTRITION is read as max(ATTRITION, 50 + (HOLD_GROUND - 50) / 2), so HOLD_GROUND 100 counts as ATTRITION 75, HOLD_GROUND 50 lifts a low ATTRITION to neutral, and the two never stack |
 | City capture bonus | +100 | x w(OCCUPATION), capped |
-| Unit kill bonus | +15 | x w(ATTRITION), capped |
-| Siege sniping | None | HOLD_CITY above 50 adds a bonus on damage to a siege unit (default role city bombard) whose plot is within three plots of our nearest city: (w(HOLD_CITY) - 1) x (damage dealt, +15 on a kill), capped at 500 |
+| Unit kill bonus | +15 | x w(ATTRITION), capped, with the same HOLD_GROUND rule on our land |
+| Attacks on city threats | None | HOLD_CITY above 50 rewards damage to enemies that threaten friendly cities in the search area. Each enemy gets one credit budget; both that budget and the extra bonus per attack are capped at 500. |
 | Damage taken, focus fire, kill effects, melee trade veto | As stock | Same, unscaled |
 
 ### Positions: `ScorePlotForCombatUnitMove` and `ScoreCombatUnitTurnEnd`
@@ -162,13 +161,14 @@ Damage and bonuses count ten times as much as plot score in the [assignment scor
 | --- | --- | --- |
 | Desirability with enemies present | Line-distance table, or a flat 12 in a friendly city or when HP is below the minimum HP | With HOLD_GROUND above 50, a land unit's positive desirability on a plot outside our territory is divided by w(HOLD_GROUND). The minimum HP comes from RISK. |
 | Danger penalty | Danger relative to HP, flattened, adjusted for experience, doubled when alone | Divided by w(RISK) when RISK is set |
-| Frontline bonus | +67 in our own city or citadel within two plots of an enemy, or +33 in the weaker case | x w(HOLD_CITY) in a city, x w(HOLD_GROUND) in a citadel |
+| Frontline bonus | +67 in a city or our own citadel within two plots of an enemy, or +33 in the weaker case | In a friendly-team city, x w(HOLD_CITY) at 50 or above, and x HOLD_CITY / 50 below it, so the bonus fades linearly to nothing at 0. A city captured during the search keeps the stock bonus. In an own citadel, x w(HOLD_GROUND) |
 | Terrain defense | Defense modifier / 5 | Same, unscaled |
 | Home ground | None | A land unit ending on a plot our team owns gets a HOLD_GROUND bonus on 5 + defense / 5. Below 50 the base is just 5, so a low flavor never makes cover look worse. |
-| City ring | None | With HOLD_CITY above 50, a land unit ending within two plots of an enemy and of our nearest city, outside the city, gets a HOLD_CITY bonus on 5 + defense / 5 |
 | Other terms | Friendlies, air cover, hiding, enemy citadels, domain, city distance, moves left | Same, unscaled |
 
-The siege and city ring terms read the player's city distance map, which only major civs keep. They are off for minor civs and the barbarians, and off when HOLD_CITY is 50 or below. The search reads the map once before it starts, so a stale map rebuilds outside the search loop.
+There is no city-ring reward. City threat preparation runs only above neutral HOLD_CITY, with a friendly-team city and an enemy in the root tactical plots. It reuses existing possible-attacker lists and estimates each relevant enemy/city pair once with the native quick damage forecast, current garrison, and no interception. Each enemy's budget is (weight - 1) times its strongest predicted city hit, capped at 500.
+
+An attack earns credit for the fraction of the enemy's search-root remaining HP it removes. Scoring subtracts cumulative credit before the hit from credit after it, so split hits, kills, and overkill cannot claim the budget twice. There is no extra kill premium. Candidate scoring uses cached values and integer arithmetic. A search with no actual threat skips bonus lookups entirely. The rule needs no city-distance map and also works for minor civs.
 
 ## RISK thresholds
 
@@ -197,12 +197,12 @@ At strength 1. "Bonus" terms are zero at 50.
 | OCCUPATION | City capture bonus | +100 | +50 | +200 |
 | ATTRITION | Unit damage | As forecast | Half | Double, change at most 500 |
 | ATTRITION | Unit kill bonus | +15 | +8 | +30 |
-| HOLD_CITY | Frontline bonus in our own city | +67, or +33 | +34 or +17 | +134 or +66 |
-| HOLD_CITY | City ring, 25% hill | None | None | +10 |
-| HOLD_CITY | Siege sniping, 30 damage | None | None | +30 |
+| HOLD_CITY | Frontline bonus in our own city | +67, or +33 | None | +134 or +66 |
+| HOLD_CITY | Friendly city threat, full budget earned | None | None | Up to +500 per enemy; total extra attack bonus up to +500 |
 | HOLD_GROUND | Frontline bonus in our own citadel | +67, or +33 | +34 or +17 | +134 or +66 |
 | HOLD_GROUND | Home ground, 25% hill | None | -3 | +10 |
 | HOLD_GROUND | Desirability 12 outside our territory | 12 | 12 | 6 |
+| HOLD_GROUND | Unit damage on our land, ATTRITION 0 | As forecast, as ATTRITION 50 | x 0.71, as ATTRITION 25 | x 1.41, as ATTRITION 75 |
 
 ### Example: choosing a target
 
@@ -234,11 +234,11 @@ Flavors are on the search's hot path, so the neutral case stays close to free:
 
 - A neutral weight returns the term without arithmetic.
 - Resolution runs once per engagement. With no modifiers and the mod option off, it costs a few checks beyond reading the general vector. A cached count skips the civ lookup when no civ modifier exists.
-- The city ring and siege terms are behind one flag computed per search.
+- City threat budgets are prepared once per search only when there is a local friendly city and a root enemy, and only above neutral HOLD_CITY. Scoring reuses cached integer budgets; searches with no actual threat skip bonus lookups.
 
 ## What flavors don't change
 
-- **Hard gates.** Death-trap checks, edge-of-vision checks, the melee trade veto, and the final extreme-danger block work as before. A flavor can make a plot more attractive, but it can't make a forbidden plot legal.
+- **Hard gates.** Death-trap checks, edge-of-vision checks, the melee trade veto, and the final extreme-danger block remain, with their stock exceptions for frontline cities and citadels. A flavor can make a plot more attractive, but it can't make a forbidden plot legal.
 - **Aggression.** The caller's [aggression level](military-tactical-simulation.md#entry-points-and-aggression) still decides which attacks are allowed and how much provisional danger is tolerated.
 - **What the search explores.** Search bounds, the 13-unit limit, duplicate pruning, and replay don't change.
 
