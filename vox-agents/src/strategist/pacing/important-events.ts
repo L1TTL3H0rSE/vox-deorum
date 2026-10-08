@@ -7,7 +7,7 @@ import type { PacingInterruptionContext, PacingInterruptionStrategy } from "./ty
 
 const warOrPeaceEventTypes = new Set(["DeclareWar", "MakePeace"]);
 const researchEventTypes = new Set(["TeamTechResearched", "TeamSetHasTech"]);
-const cultureEventTypes = new Set(["PlayerAdoptPolicy", "PlayerAdoptPolicyBranch", "IdeologyAdopted"]);
+const cultureEventTypes = new Set(["PlayerAdoptPolicy", "PlayerAdoptPolicyBranch"]);
 const relayedMessageEventType = "RelayedMessage";
 const relayedMessageImportanceThreshold = 7;
 

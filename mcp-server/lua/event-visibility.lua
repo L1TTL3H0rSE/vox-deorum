@@ -154,7 +154,7 @@ end
 
 -- Whitelist of events that should be propagated to met players with reduced visibility
 local eventsToMetPlayers = {"CircumnavigatedGlobe", "CapitalChanged",
-  "NuclearDetonation", "PantheonFounded", "IdeologyAdopted", "IdeologySwitched", "PlayerAnarchy", "PlayerGoldenAge", "PlayerLiberated",
+  "NuclearDetonation", "PantheonFounded", "PlayerAdoptPolicyBranch", "IdeologySwitched", "PlayerAnarchy", "PlayerGoldenAge", "PlayerLiberated",
   "ReligionFounded", "ReligionReformed", "ReligionEnhanced", "StateReligionAdopted", "StateReligionChanged",
   "DeclareWar", "MakePeace", "DealMade"}
 
