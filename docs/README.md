@@ -16,6 +16,7 @@ Start with **[Getting Started](players/getting-started.md)** for prerequisites, 
 Start with **[Architecture](developers/architecture.md)**: the components, how data flows between them, and why each layer exists. From there:
 
 - **[Setup](developers/setup.md)** covers building from source: toolchain, submodules, build and test commands
+- **[Fork handoff](developers/handoff.md)** covers continuing the Decisions/routing branches on another PC and the pending no-LLM headless smoke
 - **[Protocol](developers/protocol.md)** covers how messages flow end to end (DLL ↔ bridge ↔ MCP ↔ agents)
 - **[Diplomacy](developers/diplomacy.md)** follows one interactive negotiation across every component
 - **[Testing](developers/testing.md)** covers the test tiers, how to run and write tests, and the pre-submit checklist
